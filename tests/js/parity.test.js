@@ -1,0 +1,79 @@
+// Run: node tests/js/parity.test.js   (after python scripts/export_sample.py)
+// The browser engine must reproduce the Python modules on the sample data.
+const fs = require('fs'), path = require('path'), assert = require('assert');
+const root = path.resolve(__dirname, '..', '..');
+const FPA = require(path.join(root, 'docs/js/engine.js'));
+const D = require(path.join(root, 'docs/js/data.js'));
+const exp = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/expected.json'), 'utf8'));
+const csv = (f) => fs.readFileSync(path.join(root, 'docs/sample', f), 'utf8');
+
+const b = D.parseBudget(csv('budget.csv')), c = D.parseCommitments(csv('commitments.csv'));
+assert.strictEqual(b.issues.length, 0, b.issues.join(';'));
+const [yr, mo] = exp.as_of.split('-').map(Number);
+const info = D.inspect(b.rows);
+assert.strictEqual(info.lastClosed, mo, 'as-of detection');
+
+const res = FPA.forecast(b.rows, c.rows, yr, mo);
+let checked = 0;
+const close = (a, e, tol, what) => assert.ok(Math.abs(a - e) <= tol * Math.max(1, Math.abs(e)), `${what}: js ${a} vs py ${e}`);
+
+for (const s of res.series) {
+  const e = exp.series[s.dept + '|' + s.cat];
+  assert.ok(e, 'missing ' + s.dept + s.cat);
+  close(s.fyForecast, e.fy_forecast, 1e-9, 'fy_forecast ' + s.dept + s.cat);
+  close(s.sd, e.sd, 1e-9, 'sd');
+  close(s.pOver, e.p_over, 1e-5, 'p_over');
+  close(s.lo, e.lo, 1e-9, 'lo'); close(s.hi, e.hi, 1e-9, 'hi');
+  assert.strictEqual(s.risk, e.risk, 'risk ' + s.dept + s.cat);
+  assert.strictEqual(s.commitBinding, e.commit_binding, 'commit binding');
+  checked++;
+}
+assert.strictEqual(checked, Object.keys(exp.series).length);
+
+for (const g of FPA.aggregate(res.series, 'dept')) {
+  const e = exp.dept[g.dept];
+  close(g.fyForecast, e.fy_forecast, 1e-9, 'dept fc'); close(g.sd, e.sd, 1e-9, 'dept sd'); assert.strictEqual(g.risk, e.risk, 'dept risk ' + g.dept);
+}
+assert.deepStrictEqual(res.oneOffs.map((o) => [o.dept, o.cat, o.month]), exp.one_offs.map((o) => [o.dept, o.cat, Number(o.period.slice(-2))]));
+close(res.oneOffs[0].oneOff, exp.one_offs[0].one_off_amount, 1e-9, 'one-off amount');
+
+const P = res.panel;
+for (const w of ['month', 'ytd']) {
+  for (const v of FPA.variance(P, 'dept', w)) {
+    const e = exp.variance[w][v.dept];
+    close(v.variance, e.variance, 1e-9, 'variance'); assert.strictEqual(v.material, e.material, 'material ' + w + v.dept);
+  }
+}
+for (const u of FPA.utilization(P, 'dept')) {
+  const e = exp.utilization[u.dept];
+  close(u.pace, e.pace, 1e-9, 'pace'); assert.strictEqual(u.status, e.status, 'status'); close(u.requiredRun, e.required, 1e-9, 'required run rate');
+}
+for (const h of FPA.history(P, 'dept_cat')) {
+  const e = exp.history[h.dept + '|' + h.cat];
+  close(h.mean, e.mean, 1e-9, 'hist mean');
+  assert.strictEqual(h.tags.length ? h.tags.join('、') : '穩定', e.tags, 'tags ' + h.dept + h.cat);
+}
+const sp = FPA.flagSpikes(P).map((s) => [P.keys[s.k].dept, P.keys[s.k].cat, s.month, s.pattern]).sort().join('/');
+assert.strictEqual(sp, exp.spikes.map((s) => [s.dept, s.cat, Number(s.period.slice(-2)), s.pattern]).sort().join('/'), 'spikes');
+
+// reallocation sanity: transfers never exceed what a donor can give or a receiver needs
+const hist = FPA.history(P, 'dept_cat');
+const ra = FPA.reallocate(res, hist, {});
+assert.ok(ra.moves.length > 0, 'expected some transfers on sample data');
+const given = new Map(), got = new Map();
+for (const mv of ra.moves) {
+  given.set(mv.fromDept + mv.fromCat, (given.get(mv.fromDept + mv.fromCat) || 0) + mv.amount);
+  got.set(mv.toDept + mv.toCat, (got.get(mv.toDept + mv.toCat) || 0) + mv.amount);
+}
+for (const d of ra.donors) assert.ok((given.get(d.s.dept + d.s.cat) || 0) <= d.cap + 1, 'donor over-given');
+for (const r of ra.receivers) assert.ok((got.get(r.s.dept + r.s.cat) || 0) <= r.need + 1, 'receiver over-filled');
+const after = FPA.applyMoves(res.series, ra.moves);
+close(after.reduce((a, x) => a + x.after, 0), after.reduce((a, x) => a + x.before, 0), 1e-9, 'transfers conserve total budget');
+
+// an as-of month before the data ends must ignore later actuals
+const early = FPA.forecast(b.rows, [], 2025, 6);
+const tampered = b.rows.map((r) => (r.year === 2025 && r.month > 6 && r.actual !== null ? Object.assign({}, r, { actual: r.actual * 3 }) : r));
+const early2 = FPA.forecast(tampered, [], 2025, 6);
+close(early.series.reduce((a, s) => a + s.fyForecast, 0), early2.series.reduce((a, s) => a + s.fyForecast, 0), 1e-12, 'no look-ahead');
+
+console.log(`OK  ${checked} series, ${res.series.length} forecasts, parity with Python within tolerance; ${ra.moves.length} transfer suggestions`);

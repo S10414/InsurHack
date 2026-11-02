@@ -202,7 +202,7 @@ def classify_risk(fy_rate: float, p_over: float, gap: float, fy_budget: float,
     """Traffic light with a materiality test, so a 2% overrun on a NT$13M line is not a red light.
 
     Red     likely overrun (p >= 75%), at least 0.5% of budget and NT$1M
-    Yellow  smaller but probable overrun (p >= 50%, >= 1% of budget), or a large unspent balance
+    Yellow  smaller but probable overrun (p >= 50%, >= 1% of budget and >= NT$0.25M), or a large unspent balance
             (forecast < 85% of budget and at least NT$1M unspent)
     The full alert engine (src/alert) will refine this with drivers and per-department thresholds.
     """
@@ -211,7 +211,7 @@ def classify_risk(fy_rate: float, p_over: float, gap: float, fy_budget: float,
         return "紅燈・預計超支"
     if fy_rate < 0.85 and -gap >= min_amount:
         return "黃燈・預計大幅未執行"
-    if p_over >= 0.50 and pct >= 0.01:
+    if p_over >= 0.50 and pct >= 0.01 and gap >= min_amount * 0.25:
         return "黃燈・小幅超支風險"
     return "綠燈・正常"
 

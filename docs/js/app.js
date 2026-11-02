@@ -1,6 +1,8 @@
 (function () {
   'use strict';
   const F = window.FPA, DATA = window.FPAData, C = window.FPACharts, esc = C.esc;
+  const MO = window.FPAMotion;
+  let field = null, animateNext = true, lastTab = null, heroPlayed = false;
   const $ = (s, el = document) => el.querySelector(s);
 
   // ------------------------------------------------------------------ formatting
@@ -336,12 +338,15 @@
 
   function afterRender() {
     const g = (id) => document.getElementById(id);
-    if (S.tab === 'overview' && g('ch-total')) C.cumulative(g('ch-total'), S._chartPath, S.month, g('tip-total'));
-    if (S.tab === 'forecast' && g('ch-fc')) C.cumulative(g('ch-fc'), S._chartPath, S.month, g('tip-fc'));
+    const anim = animateNext; animateNext = false;
+    if (S.tab === 'overview' && g('ch-total')) { C.cumulative(g('ch-total'), S._chartPath, S.month, g('tip-total')); if (anim) MO.revealChart(g('ch-total')); }
+    if (S.tab === 'forecast' && g('ch-fc')) { C.cumulative(g('ch-fc'), S._chartPath, S.month, g('tip-fc')); if (anim) MO.revealChart(g('ch-fc')); }
+    if (S.tab !== lastTab) { MO.tabEnter($('#view')); lastTab = S.tab; }
     if (S.tab === 'variance') {
       const u = S.ui.variance, P = S.res.panel, sel = u.sel || {};
       const vars = F.variance(P, u.level, u.window, { dept: u.dept || null });
       C.waterfall(g('ch-wf'), F.waterfall(vars, 8));
+      if (anim) MO.revealBars(g('ch-wf'));
       C.varianceBars(g('ch-trend'), F.varianceTrend(P, { dept: sel.dept || u.dept || null, cat: sel.cat || null, months: 24 }), g('tip-trend'));
     }
     if (S.tab === 'history' && g('ch-shape')) {
@@ -369,10 +374,10 @@
     const t = e.target.closest('[data-tab],[data-sort],[data-go],[data-dept-go],[data-chip],[data-var-sel],[data-hist-dept],[data-export],[data-load-sample],[data-template],[data-whatif-reset],[data-risk-reset]');
     if (!t) return;
     const d = t.dataset;
-    if (d.tab) { S.tab = d.tab; render(); window.scrollTo(0, 0); }
-    else if (d.go) { S.tab = d.go; render(); window.scrollTo(0, 0); }
+    if (d.tab) { animateNext = true; S.tab = d.tab; render(); MO.toTools(); }
+    else if (d.go) { S.tab = d.go; render(); MO.toTools(); }
     else if (d.sort) { const [tab, key] = d.sort.split(':'); const s = S.ui[tab].sort; s.dir = s.key === key ? -s.dir : (key === 'name' ? 1 : -1); s.key = key; render(); }
-    else if (d.deptGo !== undefined) { S.ui.forecast.dept = d.deptGo; S.ui.forecast.cat = ''; S.ui.forecast.factor = null; S.tab = 'forecast'; render(); window.scrollTo(0, 0); }
+    else if (d.deptGo !== undefined) { S.ui.forecast.dept = d.deptGo; S.ui.forecast.cat = ''; S.ui.forecast.factor = null; S.tab = 'forecast'; animateNext = true; render(); MO.toTools(); }
     else if (d.chip) { const [p, v] = d.chip.split(':'); setPath(S.ui, p, v); render(); }
     else if (d.varSel) { const [dept, cat, name] = d.varSel.split('|'); const u = S.ui.variance; u.sel = u.sel && u.sel.name === name ? null : { dept: dept || null, cat: cat || null, name }; render(); }
     else if (d.histDept !== undefined) { const u = S.ui.history; u.dept = u.dept ? '' : d.histDept; render(); }
@@ -385,8 +390,8 @@
 
   document.addEventListener('change', (e) => {
     const t = e.target, d = t.dataset;
-    if (t.id === 'asof') { S.month = +t.value; S.ui.forecast.factor = null; recompute(); render(); return; }
-    if (d.ui) { const v = t.value; setPath(S.ui, d.ui, d.ui === 'realloc.safety' ? +v : v); if (d.ui.startsWith('forecast.')) S.ui.forecast.factor = null; if (d.ui === 'variance.dept' || d.ui === 'variance.level') S.ui.variance.sel = null; render(); }
+    if (t.id === 'asof') { S.month = +t.value; S.ui.forecast.factor = null; recompute(); animateNext = true; render(); renderHero(true); return; }
+    if (d.ui) { animateNext = true; const v = t.value; setPath(S.ui, d.ui, d.ui === 'realloc.safety' ? +v : v); if (d.ui.startsWith('forecast.')) S.ui.forecast.factor = null; if (d.ui === 'variance.dept' || d.ui === 'variance.level') S.ui.variance.sel = null; render(); }
     else if (d.set) { S.settings[d.set] = +t.value * +d.scale; render(); }
     else if (d.risk) { S.settings.risk[d.risk] = +t.value * +d.scale; recompute(); render(); }
     else if (d.ruiset) { S.ui.realloc[d.ruiset] = +t.value * +d.scale; render(); }
@@ -407,7 +412,7 @@
   function loadSample() {
     const b = DATA.parseBudget(window.FPA_SAMPLE.budget), c = DATA.parseCommitments(window.FPA_SAMPLE.commitments);
     setData(b.rows, c.rows, '範例資料（模擬）');
-    S.tab = 'overview'; render();
+    S.tab = 'overview'; animateNext = true; render(); renderHero(heroPlayed);
   }
 
   function readFile(file, kind) {
@@ -420,9 +425,11 @@
         if (!r.rows.length) { S.issues = r.issues; render(); return; }
         setData(r.rows, S.comm.filter(() => false), file.name);
         S.issues = r.issues.concat(S.issues);
+        renderHero(true);
       } else {
         const r = DATA.parseCommitments(text);
         S.comm = r.rows; recompute(); S.issues = r.issues.concat(S.info ? S.info.issues : []);
+        renderHero(true);
       }
       render();
     };
@@ -451,6 +458,61 @@
     }
   }
 
+    // ------------------------------------------------------------------ hero (headline + WebGL field)
+  function heroRows() {
+    const risk = S.settings.risk, order = { red: 0, amber: 1, green: 2 };
+    const ds = F.aggregate(S.res.series, 'dept', risk).sort((a, b) => order[F.riskClass(a.risk)] - order[F.riskClass(b.risk)] || b.gap - a.gap);
+    return ds.map((d) => {
+      const months = [];
+      for (let i = 0; i < 12; i++) {
+        let v = 0, b = 0;
+        for (const s of d.members) { b += s.monthB[i]; v += i < S.month ? s.monthA[i] : s.monthF[i - S.month]; }
+        months.push({ value: v, budget: b, forecast: i >= S.month });
+      }
+      return { name: d.dept, months };
+    });
+  }
+
+  function renderHero(replay) {
+    const title = $('#hero-title'), sub = $('#hero-sub');
+    if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; sub.textContent = ''; return; }
+    const t = F.aggregate(S.res.series, 'total', S.settings.risk)[0];
+    const over = S.res.series.filter((s) => s.risk.startsWith('紅')).length;
+    const under = S.res.series.filter((s) => s.risk === '黃燈・預計大幅未執行').length;
+    const gapM = Math.abs(t.gap) / 1e6;
+    title.innerHTML =
+      `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <span class="nw"><b data-v="${gapM.toFixed(1)}" data-d="1">${gapM.toFixed(1)}</b> 百萬元</span></span></span>` +
+      `<span class="ln sm"><span><b data-v="${over}">${over}</b> 個項目可能超支，<b data-v="${under}">${under}</b> 個項目明顯用不完</span></span>`;
+    sub.innerHTML = `資料截至 ${S.year} 年 ${S.month} 月底，${depts().length} 個部門、${cats().length} 類費用。每根柱子是一個部門一個月的支出，白色薄板是當月預算，${S.month + 1} 月起為預測。移到柱子上看數字，點一下看該部門的年底預測。`;
+    if (field) field.setData({ rows: heroRows(), closed: S.month });
+    if (!heroPlayed) { heroPlayed = true; MO.heroIntro(field); }
+    else if (replay) { MO.refreshHeroNumbers(); MO.regrow(); }
+  }
+
+  function initField() {
+    const canvas = $('#field'), tip = $('#field-tip');
+    const M1 = (x) => (x / 1e6).toLocaleString('zh-TW', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    try {
+      field = window.FPAField && window.FPAField.create(canvas, $('#field-labels'), {
+        reducedMotion: !MO.enabled,
+        onHover(c, x, y) {
+          if (!c) { tip.hidden = true; return; }
+          const r = c.value / c.budget - 1;
+          tip.innerHTML = `<b>${esc(c.row)}</b>　${S.year} 年 ${c.i + 1} 月${c.forecast ? '（預測）' : ''}<br>支出 ${M1(c.value)}　預算 ${M1(c.budget)} 百萬元<br><span class="${r > 0 ? 'pos' : 'neg'}">${r > 0 ? '+' : ''}${(r * 100).toFixed(1)}%</span>`;
+          tip.hidden = false;
+          const w = canvas.clientWidth;
+          tip.style.transform = `translate(${Math.min(x + 14, w - 230)}px, ${Math.max(y - 70, 4)}px)`;
+        },
+        onPick(c) { S.ui.forecast.dept = c.row; S.ui.forecast.cat = ''; S.ui.forecast.factor = null; S.tab = 'forecast'; animateNext = true; render(); MO.goTools(); },
+      });
+    } catch (e) { field = null; console.warn('WebGL field disabled:', e.message); }
+    if (!field) document.body.classList.add('no-webgl');
+    else MO.pinHero($('#hero'), field);
+  }
+
   // ------------------------------------------------------------------ boot
+  MO.init();
+  initField();
   loadSample();
+  $('#cue').addEventListener('click', () => MO.goTools());
 })();

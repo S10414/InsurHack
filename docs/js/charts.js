@@ -31,6 +31,8 @@
     }
     for (let i = 0; i < 12; i++) s += `<text x="${xs(i)}" y="${H - 8}" text-anchor="middle">${i + 1}月</text>`;
     s += `<text x="${L}" y="10">${uname}元</text>`;
+    const cid = 'rv-' + (el.id || Math.random().toString(36).slice(2));
+    s += `<defs><clipPath id="${cid}"><rect class="reveal-rect" x="0" y="0" width="${W}" data-w="${W}" height="${H}"/></clipPath></defs><g clip-path="url(#${cid})">`;
     if (m < 12) {
       const base = path.actual[m - 1];
       const hi = [base, ...path.hi], lo = [base, ...path.lo];
@@ -45,6 +47,7 @@
       s += `<line x1="${xs(m - 1)}" x2="${xs(m - 1)}" y1="${T}" y2="${H - B}" stroke="var(--mute)" stroke-dasharray="2 3"/>`;
       s += `<circle cx="${xs(11)}" cy="${ys(path.forecast[path.forecast.length - 1])}" r="4" fill="var(--accent)"/>`;
     }
+    s += '</g>';
     s += `<rect class="hov" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/></svg>`;
     el.innerHTML = s;
     const rect = el.querySelector('.hov');
@@ -74,7 +77,7 @@
       const top = Math.max(b.a, b.b === 0 ? ymin : b.b), bot = t ? ymin : Math.min(b.a, b.b);
       const y1 = ys(t ? b.a : Math.max(b.a, b.b)), y2 = ys(t ? ymin : Math.min(b.a, b.b));
       const color = t ? 'var(--budget)' : b.it.value > 0 ? 'var(--red)' : 'var(--accent)';
-      s += `<rect x="${x}" y="${y1}" width="${w}" height="${Math.max(2, y2 - y1)}" fill="${color}" rx="2"/>`;
+      s += `<rect class="wf" x="${x}" y="${y1}" width="${w}" height="${Math.max(2, y2 - y1)}" fill="${color}" rx="2"/>`;
       const lab = t ? num(b.it.value / u, 1) : (b.it.value > 0 ? '+' : '') + num(b.it.value / u, 1);
       s += `<text x="${x + w / 2}" y="${y1 - 5}" text-anchor="middle">${lab}</text>`;
       s += `<text x="${x + w / 2}" y="${H - B + 14}" text-anchor="end" transform="rotate(-35 ${x + w / 2} ${H - B + 14})">${esc(b.it.label)}</text>`;

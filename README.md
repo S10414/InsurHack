@@ -21,6 +21,15 @@ CSVs (budget + actual per dept x category x month, optional signed commitments).
 | Reallocation | suggested transfers from safe-surplus lines to likely-overrun lines, with caveats |
 | Data | sample / upload / templates / data-quality warnings |
 
+### Front-end stack
+- `docs/js/field.js` — WebGL2 "budget field" in the hero: one bar per department x month (actual, or translucent hatched
+  forecast), a plate at that month's budget, coloured by spend vs budget. Hover for numbers, click to open that
+  department's forecast. Hand-written shaders, no 3D library.
+- `docs/js/motion.js` — GSAP 3.15 + ScrollTrigger and Lenis 1.3 (vendored in `docs/vendor/`): one load sequence, a pinned
+  scroll that tilts the field into a top-down heat map, and transitions only in response to user actions.
+  `prefers-reduced-motion` turns smooth scrolling and animation off; browsers without WebGL2 get the headline only.
+- GSAP is used under its standard no-charge license; Lenis is MIT.
+
 Pages setting: Settings -> Pages -> Deploy from a branch -> `main` and either `/ (root)` or `/docs` (root redirects to `docs/`).
 
 ## Status

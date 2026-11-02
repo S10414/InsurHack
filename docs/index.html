@@ -5,31 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cardif FP&A Copilot｜預算分析與差異分析工具</title>
 <meta name="description" content="部門費用預算追蹤、差異分析、年底預測、預警與預算調配。可載入範例資料或上傳自己的預算與實際數。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/lenis.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div class="wrap">
-  <div class="top">
-    <div>
-      <h1>Cardif FP&amp;A Copilot</h1>
-      <div class="sub">部門費用預算分析工具　｜　2026 Cardif InsurHack 題目 6-1</div>
-    </div>
+<header class="hero" id="hero">
+  <div class="hero-bar wrap">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Cardif FP&amp;A Copilot<span class="brand-sub">部門費用預算分析</span></div>
     <div class="ctrl">
       <span id="source"></span>
       <label>資料截至 <select id="asof"></select></label>
     </div>
   </div>
-  <nav id="nav"></nav>
+  <div class="hero-copy wrap">
+    <h1 class="hero-title" id="hero-title"></h1>
+    <p class="hero-sub" id="hero-sub"></p>
+    <ul class="hero-legend" aria-label="圖例">
+      <li><i class="sw over"></i>高於預算</li>
+      <li><i class="sw mid"></i>接近預算</li>
+      <li><i class="sw under"></i>低於預算</li>
+      <li><i class="sw plate"></i>當月預算</li>
+      <li><i class="sw fc"></i>預測月份</li>
+    </ul>
+  </div>
+  <div class="hero-stage">
+    <canvas id="field" aria-label="各部門每月支出與預算的立體圖"></canvas>
+    <div class="field-labels" id="field-labels" aria-hidden="true"></div>
+    <div class="field-tip" id="field-tip" hidden></div>
+    <button class="scroll-cue" id="cue" type="button">往下開始分析</button>
+  </div>
+</header>
+
+<div class="wrap tool">
+  <nav id="nav" aria-label="功能"></nav>
   <main id="view"></main>
   <footer>
     所有計算都在你的瀏覽器內完成，上傳的資料不會離開這台電腦。範例資料為模擬資料，與法國巴黎人壽內部資料無關。
     <a id="repo" href="https://github.com/S10414/InsurHack">原始碼與測試</a>
   </footer>
 </div>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/ScrollTrigger.min.js"></script>
+<script src="vendor/lenis.min.js"></script>
 <script src="js/sample-data.js"></script>
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/field.js"></script>
+<script src="js/motion.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

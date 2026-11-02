@@ -1,0 +1,15 @@
+{
+  "seed": 42,
+  "as_of": "2026-10",
+  "current_year": 2026,
+  "years": [
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "currency": "TWD",
+  "unit": "NTD (元)",
+  "generated_at": "2026-11-02T22:57:20",
+  "note": "Synthetic data. Not based on any internal Cardif data."
+}

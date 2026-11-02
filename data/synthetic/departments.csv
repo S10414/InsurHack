@@ -1,0 +1,11 @@
+﻿dept_code,dept_name,dept_name_en,profile,affected_categories,description
+SALES,業務通路部,Sales & Distribution,chronic_overrun,"TRVL,MKT,TRN",差旅、通路行銷與業務訓練每年都超支約 10%，預算只部分反映
+MKTG,行銷企劃部,Marketing,q4_rush,"MKT,CONS",前三季執行偏低，11~12 月集中消化預算
+IT,資訊科技部,Information Technology,project_delay,"IT,CONS",今年新增核心系統專案，招標延後，前三季執行率明顯落後
+CS,客戶服務部,Customer Service,normal,,穩定執行
+CLM,理賠部,Claims,emerging_overrun,CONS,理賠案件量上升，下半年委外調查與外包費用暴增
+ACT,精算部,Actuarial,normal,,穩定執行
+FIN,財務部,Finance,one_off,CONS,9 月一次性顧問費（會計準則與系統調整），單月大幅超支
+HR,人力資源部,Human Resources,chronic_underspend,TRN,教育訓練預算長期只用 80~88%，有預算寬列跡象
+CMP,法令遵循部,Compliance,normal,,穩定執行
+ADM,行政管理部,Administration,normal,,租金為主，執行最穩定

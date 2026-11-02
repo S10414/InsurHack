@@ -1,0 +1,60 @@
+[
+  {
+    "dept_code": "SALES",
+    "categories": [
+      "TRVL",
+      "MKT",
+      "TRN"
+    ],
+    "profile": "chronic_overrun",
+    "description": "差旅、通路行銷與業務訓練每年都超支約 10%，預算只部分反映",
+    "expected_signal": "年底預測超支；歷史執行率連續 >105%，建議調整預算基準"
+  },
+  {
+    "dept_code": "MKTG",
+    "categories": [
+      "MKT",
+      "CONS"
+    ],
+    "profile": "q4_rush",
+    "description": "前三季執行偏低，11~12 月集中消化預算",
+    "expected_signal": "YTD 執行率低於時間進度，但歷史型態顯示 Q4 會補上，不應誤判為落後"
+  },
+  {
+    "dept_code": "IT",
+    "categories": [
+      "IT",
+      "CONS"
+    ],
+    "profile": "project_delay",
+    "description": "今年新增核心系統專案，招標延後，前三季執行率明顯落後",
+    "expected_signal": "YTD 嚴重落後；承諾支出高，年底仍可能大幅未執行，提示專案進度風險"
+  },
+  {
+    "dept_code": "CLM",
+    "categories": [
+      "CONS"
+    ],
+    "profile": "emerging_overrun",
+    "description": "理賠案件量上升，下半年委外調查與外包費用暴增",
+    "expected_signal": "下半年月度差異持續擴大，年底預測超支，屬新出現的風險"
+  },
+  {
+    "dept_code": "FIN",
+    "categories": [
+      "CONS"
+    ],
+    "profile": "one_off",
+    "description": "9 月一次性顧問費（會計準則與系統調整），單月大幅超支",
+    "expected_signal": "單月重大差異，排除一次性項目後趨勢正常"
+  },
+  {
+    "dept_code": "HR",
+    "categories": [
+      "TRN"
+    ],
+    "profile": "chronic_underspend",
+    "description": "教育訓練預算長期只用 80~88%，有預算寬列跡象",
+    "expected_signal": "歷年執行率 80~88%，建議調降明年預算或重分配餘額"
+  }
+]

@@ -1,0 +1,9 @@
+﻿cat_code,cat_name,cat_name_en,commit_type
+PERS,人事費用,Personnel,
+MKT,行銷廣告,Marketing & Advertising,採購單
+IT,資訊軟硬體,IT Hardware & Software,合約
+CONS,外包顧問,Outsourcing & Consulting,合約
+TRVL,差旅交際,Travel & Entertainment,採購單
+RENT,租金及設施,Rent & Facilities,租約
+TRN,教育訓練,Training,採購單
+MISC,其他雜支,Miscellaneous,採購單

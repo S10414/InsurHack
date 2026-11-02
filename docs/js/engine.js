@@ -43,21 +43,25 @@
   }
   const normCdf = (z) => (z === Infinity ? 1 : z === -Infinity ? 0 : 0.5 * (1 + erf(z / Math.SQRT2)));
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const SEP = '\u0001';
+  /** Budget line = department x project x expense category. Project is optional ('' = not split). */
+  const lineKey = (x) => x.dept + SEP + (x.proj || '') + SEP + x.cat;
+  const lineName = (x) => [x.dept, x.proj, x.cat].filter(Boolean).join('・');
 
   // ------------------------------------------------------------------ panel
-  /** rows: [{year, month, dept, cat, budget, actual|null}] -> panel as of (year, m). */
+  /** rows: [{year, month, dept, proj?, cat, budget, actual|null}] -> panel as of (year, m). */
   function makePanel(rows, year, m) {
     const used = rows.filter((r) => r.year <= year);
     const years = [...new Set(used.map((r) => r.year))].sort((a, b) => a - b);
     const kmap = new Map();
-    for (const r of used) kmap.set(r.dept + '\u0001' + r.cat, { dept: r.dept, cat: r.cat });
-    const keys = [...kmap.values()].sort((a, b) => cmp(a.dept, b.dept) || cmp(a.cat, b.cat));
-    const idx = new Map(keys.map((k, i) => [k.dept + '\u0001' + k.cat, i]));
+    for (const r of used) kmap.set(lineKey(r), { dept: r.dept, proj: r.proj || '', cat: r.cat });
+    const keys = [...kmap.values()].sort((a, b) => cmp(a.dept, b.dept) || cmp(a.proj, b.proj) || cmp(a.cat, b.cat));
+    const idx = new Map(keys.map((k, i) => [lineKey(k), i]));
     const yidx = new Map(years.map((y, i) => [y, i]));
     const mk = () => keys.map(() => years.map(() => new Float64Array(12).fill(NaN)));
     const B = mk(), A = mk();
     for (const r of used) {
-      const k = idx.get(r.dept + '\u0001' + r.cat), y = yidx.get(r.year), mi = r.month - 1;
+      const k = idx.get(lineKey(r)), y = yidx.get(r.year), mi = r.month - 1;
       if (isNum(r.budget)) B[k][y][mi] = nz(B[k][y][mi]) + r.budget;
       if (isNum(r.actual) && !(r.year === year && r.month > m)) A[k][y][mi] = nz(A[k][y][mi]) + r.actual;
     }
@@ -161,7 +165,9 @@
         const z = sd > 0 ? (o.a - mean) / sd : NaN;
         if (ratio[i] >= ratioThr && z >= zThr) {
           const nb = (i > 0 && high[i - 1]) || (i < obs.length - 1 && high[i + 1]);
-          out.push({ k, month: o.mi + 1, actual: o.a, budget: o.b, ratio: ratio[i], z, pattern: nb ? '持續偏高' : '單月異常' });
+          const nxt = ratio.slice(i + 1, i + 4).filter((x) => !Number.isNaN(x));
+          const staysHigh = nxt.length > 0 && nxt.reduce((a, b) => a + b, 0) / nxt.length >= 1 + (ratioThr - 1) / 2;
+          out.push({ k, month: o.mi + 1, actual: o.a, budget: o.b, ratio: ratio[i], z, pattern: nb || staysHigh ? '持續偏高' : '單月異常' });
         }
       });
     }
@@ -179,7 +185,7 @@
       for (let mi = 0; mi < P.m; mi++) if (mi + 1 !== s.month && isNum(cur[mi])) others.push(cur[mi] / B[mi]);
       const normal = B[s.month - 1] * median(others);
       A[s.k] = A[s.k].slice(); A[s.k][P.yi] = Float64Array.from(cur); A[s.k][P.yi][s.month - 1] = normal;
-      log.push({ k: s.k, dept: P.keys[s.k].dept, cat: P.keys[s.k].cat, month: s.month, actual: s.actual,
+      log.push({ k: s.k, dept: P.keys[s.k].dept, proj: P.keys[s.k].proj, cat: P.keys[s.k].cat, month: s.month, actual: s.actual,
         normalized: normal, oneOff: s.actual - normal });
     }
     return { panel: Object.assign({}, P, { A }), log };
@@ -218,11 +224,17 @@
     const { W, sigma, n } = fitWeights(PL, m, train);
 
     const C = P.keys.map(() => new Float64Array(12));
-    const kidx = new Map(P.keys.map((k, i) => [k.dept + '\u0001' + k.cat, i]));
+    const kidx = new Map(P.keys.map((k, i) => [lineKey(k), i]));
     for (const c of commitments || []) {
-      if (c.year !== year) continue;
-      const k = kidx.get(c.dept + '\u0001' + c.cat);
-      if (k !== undefined && c.month >= 1 && c.month <= 12) C[k][c.month - 1] += c.amount;
+      if (c.year !== year || !(c.month >= 1 && c.month <= 12)) continue;
+      const k = kidx.get(lineKey(c));
+      if (k !== undefined) { C[k][c.month - 1] += c.amount; continue; }
+      if (c.proj) continue;
+      // commitment recorded without a project: spread over the department's projects in that category
+      // in proportion to their budget for that month
+      const ks = []; let tot = 0;
+      P.keys.forEach((key, i) => { if (key.dept === c.dept && key.cat === c.cat) { ks.push(i); tot += nz(P.B[i][yi][c.month - 1]); } });
+      for (const i of ks) C[i][c.month - 1] += tot > 0 ? c.amount * nz(P.B[i][yi][c.month - 1]) / tot : c.amount / ks.length;
     }
     const floorOn = opts.floorCommitments !== false;
 
@@ -243,7 +255,7 @@
       for (let mm = m; mm < 12; mm++) { cum += B[mm]; sdCum.push(sdFactor * cum); }
       const fcRem = monthF.reduce((a, b) => a + b, 0);
       return finish({
-        k, dept: key.dept, cat: key.cat,
+        k, dept: key.dept, proj: key.proj, cat: key.cat,
         fyBudget: sum(B, 0, 12), ytdBudget: ytdB, ytdActual: ytdA, remBudget: remB,
         fcRemaining: fcRem, fyForecast: ytdA + fcRem, sd: sigma[k] * remB,
         commitRemaining: sum(C[k], m, 12), commitBinding: binding,
@@ -260,9 +272,14 @@
   const LEVELS = {
     total: { key: () => 'all', label: () => ({ name: '全公司' }) },
     dept: { key: (s) => s.dept, label: (s) => ({ dept: s.dept, name: s.dept }) },
+    proj: { key: (s) => s.dept + SEP + (s.proj || ''), label: (s) => ({ dept: s.dept, proj: s.proj || '', name: lineName({ dept: s.dept, proj: s.proj }) }) },
     cat: { key: (s) => s.cat, label: (s) => ({ cat: s.cat, name: s.cat }) },
-    dept_cat: { key: (s) => s.dept + '\u0001' + s.cat, label: (s) => ({ dept: s.dept, cat: s.cat, name: s.dept + '・' + s.cat }) },
+    dept_cat: { key: (s) => s.dept + SEP + s.cat, label: (s) => ({ dept: s.dept, cat: s.cat, name: s.dept + '・' + s.cat }) },
+    series: { key: lineKey, label: (s) => ({ dept: s.dept, proj: s.proj || '', cat: s.cat, name: lineName(s) }) },
   };
+  /** Does a budget line pass a {dept, proj, cat} filter? Missing dept/cat or proj = null/undefined match
+   *  everything; proj = '' selects the lines without a project. */
+  const inScope = (s, f) => !!s && (!f.dept || s.dept === f.dept) && (f.proj === undefined || f.proj === null || (s.proj || '') === f.proj) && (!f.cat || s.cat === f.cat);
 
   function aggregate(series, level, risk) {
     const L = LEVELS[level];
@@ -318,9 +335,8 @@
     const L = LEVELS[level];
     const groups = new Map();
     for (let k = 0; k < P.K; k++) {
-      const key = P.keys[k];
-      const s = { dept: key.dept, cat: key.cat };
-      if (o.dept && key.dept !== o.dept) continue;
+      const s = P.keys[k];
+      if (!inScope(s, o)) continue;
       const gk = L.key(s);
       if (!groups.has(gk)) groups.set(gk, Object.assign(L.label(s), { budget: 0, actual: 0 }));
       const g = groups.get(gk);
@@ -341,8 +357,7 @@
         if (y === P.yi && mi >= P.m) break;
         let b = 0, a = 0, ok = false;
         for (let k = 0; k < P.K; k++) {
-          const key = P.keys[k];
-          if ((o.dept && key.dept !== o.dept) || (o.cat && key.cat !== o.cat)) continue;
+          if (!inScope(P.keys[k], o)) continue;
           const v = P.A[k][y][mi];
           if (isNum(v)) { a += v; b += P.B[k][y][mi]; ok = true; }
         }
@@ -368,6 +383,7 @@
     const L = LEVELS[level], m = P.m, groups = new Map();
     for (let k = 0; k < P.K; k++) {
       const s = P.keys[k], gk = L.key(s);
+      if (!inScope(s, o)) continue;
       if (!groups.has(gk)) groups.set(gk, Object.assign(L.label(s), { fyBudget: 0, ytdBudget: 0, ytdActual: 0, recentSum: 0 }));
       const g = groups.get(gk), B = P.B[k][P.yi], A = P.A[k][P.yi];
       g.fyBudget += sum(B, 0, 12); g.ytdBudget += sum(B, 0, m); g.ytdActual += sum(A, 0, m);
@@ -387,8 +403,7 @@
   function utilizationCurve(P, filter = {}) {
     const bm = Array(12).fill(0), am = Array(P.m).fill(0);
     for (let k = 0; k < P.K; k++) {
-      const key = P.keys[k];
-      if ((filter.dept && key.dept !== filter.dept) || (filter.cat && key.cat !== filter.cat)) continue;
+      if (!inScope(P.keys[k], filter)) continue;
       for (let i = 0; i < 12; i++) bm[i] += P.B[k][P.yi][i];
       for (let i = 0; i < P.m; i++) am[i] += P.A[k][P.yi][i];
     }
@@ -413,6 +428,7 @@
     const closed = []; for (let y = 0; y < P.yi; y++) closed.push(y);
     for (let k = 0; k < P.K; k++) {
       const s = P.keys[k], gk = L.key(s);
+      if (!inScope(s, o)) continue;
       if (!groups.has(gk)) groups.set(gk, Object.assign(L.label(s), {
         B: closed.map(() => Array(12).fill(0)), A: closed.map(() => Array(12).fill(0)) }));
       const g = groups.get(gk);
@@ -422,7 +438,7 @@
       const years = closed.map((y) => P.years[y]);
       const rates = closed.map((_, i) => div(sum(g.A[i], 0, 12), sum(g.B[i], 0, 12)));
       const gaps = closed.map((_, i) => div(sum(g.A[i], 9, 12), sum(g.A[i], 0, 12)) - div(sum(g.B[i], 9, 12), sum(g.B[i], 0, 12)));
-      const out = { name: g.name, dept: g.dept, cat: g.cat, years, rates };
+      const out = { name: g.name, dept: g.dept, proj: g.proj, cat: g.cat, years, rates };
       out.mean = nanmean(rates); out.min = Math.min(...rates); out.max = Math.max(...rates);
       out.q4Gap = nanmean(gaps);
       out.trend = rates.length >= 2 ? linSlope(years, rates) : NaN;
@@ -449,11 +465,12 @@
     '黃燈・小幅超支風險': '持續追蹤，下月檢討；必要時控管剩餘月份支出。',
   };
 
+  /** Alerts per budget line. `hist` must be history(P, 'series'). */
   function buildAlerts(result, hist, o = {}) {
-    const hmap = new Map(hist.map((h) => [h.dept + '\u0001' + h.cat, h]));
+    const hmap = new Map(hist.map((h) => [lineKey(h), h]));
     const out = [];
     for (const s of result.series) {
-      const h = hmap.get(s.dept + '\u0001' + s.cat);
+      const h = hmap.get(lineKey(s));
       const tags = h ? h.tags : [];
       if (!s.risk.startsWith('綠')) {
         let text = `年累計執行 ${(s.ytdActual / s.fyBudget * 100).toFixed(0)}%（預算同期 ${(s.ytdBudget / s.fyBudget * 100).toFixed(0)}%），` +
@@ -462,16 +479,16 @@
         if (s.commitRemaining > 0 && s.commitBinding) text += `已簽約未付款 ${(s.commitRemaining / 1e6).toFixed(1)} 百萬元，預測已納入。`;
         if (tags.includes('Q4集中消化')) text += '歷史上 Q4 會集中消化，年累計落後不代表全年不足。';
         if (tags.includes('長期超支')) text += '近年執行率持續高於 100%，建議檢討預算基準。';
-        out.push({ level: s.risk.slice(0, 2), type: s.risk, dept: s.dept, cat: s.cat, title: `${s.dept}・${s.cat}`,
+        out.push({ level: s.risk.slice(0, 2), type: s.risk, dept: s.dept, proj: s.proj, cat: s.cat, title: lineName(s),
           text, action: ACTIONS[s.risk], gap: s.gap, rate: s.rate, pOver: s.pOver, tags });
       } else if (s.paceIndex < 0.9 && tags.includes('Q4集中消化')) {
-        out.push({ level: '提示', type: '執行落後但屬季節性', dept: s.dept, cat: s.cat, title: `${s.dept}・${s.cat}`,
+        out.push({ level: '提示', type: '執行落後但屬季節性', dept: s.dept, proj: s.proj, cat: s.cat, title: lineName(s),
           text: `年累計僅為同期預算的 ${(s.paceIndex * 100).toFixed(0)}%，但歷史上 Q4 會集中消化，預測全年為預算的 ${(s.rate * 100).toFixed(0)}%，不列為風險。`,
           action: '無需處置，持續觀察 Q4 實際執行。', gap: s.gap, rate: s.rate, pOver: s.pOver, tags });
       }
     }
     for (const r of result.oneOffs) {
-      out.push({ level: '提示', type: '單月異常', dept: r.dept, cat: r.cat, title: `${r.dept}・${r.cat}`,
+      out.push({ level: '提示', type: '單月異常', dept: r.dept, proj: r.proj, cat: r.cat, title: lineName(r),
         text: `${r.month} 月支出 ${(r.actual / 1e6).toFixed(1)} 百萬元，約為正常水準的 ${(r.actual / r.normalized).toFixed(1)} 倍，判定為一次性支出；已計入實際數，但不外推到後續月份。`,
         action: '確認該筆支出性質與是否需要補充預算。', gap: r.oneOff, rate: NaN, pOver: NaN, tags: [] });
     }
@@ -484,16 +501,18 @@
    * Suggest moving budget from lines that will end with a safe surplus to lines that will overrun.
    * donor capacity  = budget - (forecast + safety x (upper bound - forecast))   [safety 0..1]
    * receiver need   = forecast - budget
-   * Same-category transfers are matched first; cross-category transfers are flagged.
+   * Matching order: same department and category (another project), then same category in another
+   * department, then (flagged) another category.
+   * `hist` must be history(P, 'series').
    */
   function reallocate(result, hist, o = {}) {
     const safety = o.safety ?? 1, minAmt = o.minAmount ?? 1e6, allowCross = o.allowCross !== false;
-    const hmap = new Map(hist.map((h) => [h.dept + '\u0001' + h.cat, h]));
+    const hmap = new Map(hist.map((h) => [lineKey(h), h]));
     const donors = [], receivers = [];
     for (const s of result.series) {
       const cap = s.fyBudget - (s.fyForecast + safety * (s.hi - s.fyForecast));
       const need = s.fyForecast - s.fyBudget;
-      const tags = (hmap.get(s.dept + '\u0001' + s.cat) || { tags: [] }).tags;
+      const tags = (hmap.get(lineKey(s)) || { tags: [] }).tags;
       if (cap >= minAmt) donors.push({ s, left: cap, cap, tags });
       else if (need >= minAmt && s.pOver >= 0.5) receivers.push({ s, need, left: need });
     }
@@ -510,9 +529,11 @@
       if (d.tags.includes('長期未用完')) notes.push('歷史上長期未用完，適合同時檢討明年預算');
       if (d.s.paceIndex < 0.8 && !d.tags.includes('長期未用完')) notes.push('今年執行落後，需確認不是專案延後而於年底補執行');
       if (cross) notes.push('跨費用科目調配，需確認是否符合預算管理規範');
-      moves.push({ fromDept: d.s.dept, fromCat: d.s.cat, toDept: r.s.dept, toCat: r.s.cat, amount: amt, cross, notes });
+      moves.push({ fromDept: d.s.dept, fromProj: d.s.proj, fromCat: d.s.cat, toDept: r.s.dept, toProj: r.s.proj, toCat: r.s.cat,
+        from: lineName(d.s), to: lineName(r.s), amount: amt, cross, inDept: d.s.dept === r.s.dept, notes });
     };
     for (const r of receivers) {
+      for (const d of donors) if (r.left > 0 && d.left > 0 && d.s.cat === r.s.cat && d.s.dept === r.s.dept) take(r, d, false);
       for (const d of donors) if (r.left > 0 && d.left > 0 && d.s.cat === r.s.cat && d.s.dept !== r.s.dept) take(r, d, false);
       if (allowCross) for (const d of donors) if (r.left > 0 && d.left > 0 && d.s.cat !== r.s.cat) take(r, d, true);
     }
@@ -523,14 +544,17 @@
     return { moves, donors, receivers, summary };
   }
 
-  /** Post-transfer position of every dept x category line. */
+  /** Post-transfer position of every budget line. */
   function applyMoves(series, moves) {
     const delta = new Map();
-    const add = (d, c, v) => { const k = d + '\u0001' + c; delta.set(k, (delta.get(k) || 0) + v); };
-    for (const mv of moves) { add(mv.fromDept, mv.fromCat, -mv.amount); add(mv.toDept, mv.toCat, mv.amount); }
+    const add = (k, v) => delta.set(k, (delta.get(k) || 0) + v);
+    for (const mv of moves) {
+      add(lineKey({ dept: mv.fromDept, proj: mv.fromProj, cat: mv.fromCat }), -mv.amount);
+      add(lineKey({ dept: mv.toDept, proj: mv.toProj, cat: mv.toCat }), mv.amount);
+    }
     return series.map((s) => {
-      const nb = s.fyBudget + (delta.get(s.dept + '\u0001' + s.cat) || 0);
-      return { dept: s.dept, cat: s.cat, before: s.fyBudget, after: nb, forecast: s.fyForecast,
+      const nb = s.fyBudget + (delta.get(lineKey(s)) || 0);
+      return { dept: s.dept, proj: s.proj, cat: s.cat, name: lineName(s), before: s.fyBudget, after: nb, forecast: s.fyForecast,
         rateBefore: s.fyForecast / s.fyBudget, rateAfter: s.fyForecast / nb };
     });
   }
@@ -546,7 +570,7 @@
   const api = {
     METHODS, METHOD_LABELS, Z80, DEFAULT_SETTINGS, makePanel, methodFactors, fitWeights, forecast, aggregate, groupPath,
     variance, varianceTrend, waterfall, utilization, utilizationCurve, history, buildAlerts, reallocate, applyMoves,
-    whatIf, flagSpikes, classifyRisk, riskClass, LEVELS, isNum,
+    whatIf, flagSpikes, classifyRisk, riskClass, LEVELS, isNum, lineKey, lineName, inScope,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FPA = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,0 +1,25 @@
+﻿dept_code,proj_code,proj_name,profile,affected_categories,categories,description
+SALES,SALES-BANCA,銀行保險通路經營,chronic_overrun,"TRVL,MKT,TRN","PERS,MKT,TRVL,TRN",銀行通路的教育訓練與通路活動每年小幅超支
+SALES,SALES-AGENCY,經代通路拓展,chronic_overrun,"TRVL,MKT,TRN","PERS,MKT,TRVL,TRN",經紀代理通路的差旅、獎勵活動與訓練每年都超支約 15%，是業務部超支的主因
+SALES,SALES-OPS,業務支援與據點,normal,,"PERS,CONS,IT,RENT,MISC",
+MKTG,MKTG-BRAND,品牌形象廣告,q4_rush,"MKT,CONS","MKT,CONS",品牌廣告檔期集中在年底，前三季執行偏低
+MKTG,MKTG-LAUNCH,新商品上市活動,q4_rush,"MKT,CONS","MKT,CONS,TRVL",新商品於第四季上市，宣傳費用集中在 11~12 月
+MKTG,MKTG-DIGI,數位投保推廣,normal,,"MKT,IT,CONS",
+MKTG,MKTG-OPS,部門營運,normal,,"PERS,TRVL,TRN,MISC",
+IT,IT-CORE,核心系統換版,project_delay,"IT,CONS","IT,CONS",今年進入第二期，招標延後，前三季執行率明顯落後
+IT,IT-OPS,系統維運,normal,,"PERS,IT,CONS,RENT,MISC,TRN",
+IT,IT-SEC,資安強化,normal,,"IT,CONS",
+CS,CS-CALL,客服中心營運,normal,,"PERS,CONS,RENT,MISC,TRN",
+CS,CS-DIGI,智能客服,normal,,"PERS,IT,CONS,TRN",
+CLM,CLM-OPS,理賠作業,normal,,"PERS,IT,TRN,RENT,MISC",
+CLM,CLM-INV,委外理賠調查,emerging_overrun,CONS,CONS,理賠案件量上升，下半年委外調查費用暴增
+ACT,ACT-OPS,精算作業,normal,,"PERS,IT,TRN,MISC,CONS",
+ACT,ACT-IFRS,IFRS 17 模型維護,normal,,"PERS,CONS,IT",
+FIN,FIN-OPS,財會作業,normal,,"PERS,IT,TRN,TRVL,MISC",
+FIN,FIN-ICS,TW-ICS 接軌專案,one_off,CONS,"CONS,IT",9 月一次性顧問費（新一代清償能力制度與系統調整），單月大幅超支
+HR,HR-OPS,人資作業,normal,,"PERS,IT,MISC,CONS",
+HR,HR-LEARN,人才培育計畫,chronic_underspend,TRN,"TRN,TRVL",教育訓練預算長期只用 80~88%，有預算寬列跡象
+CMP,CMP-OPS,法遵作業,normal,,"PERS,TRN,MISC,CONS",
+CMP,CMP-AML,洗錢防制系統,normal,,"IT,CONS",
+ADM,ADM-FAC,辦公室與設施,normal,,"RENT,MISC,CONS",
+ADM,ADM-OPS,行政作業,normal,,"PERS,MISC,IT,CONS",

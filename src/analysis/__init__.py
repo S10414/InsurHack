@@ -9,7 +9,11 @@ LEVELS: dict[str, list[str]] = {
     "dept": ["dept_code", "dept_name"],
     "cat": ["cat_code", "cat_name"],
     "dept_cat": ["dept_code", "dept_name", "cat_code", "cat_name"],
+    "proj": ["dept_code", "dept_name", "proj_code", "proj_name"],
+    # the finest grain: one budget line = department x project x expense category
+    "series": ["dept_code", "dept_name", "proj_code", "proj_name", "cat_code", "cat_name"],
 }
+SERIES = ["dept_code", "proj_code", "cat_code"]
 
 
 def parse_as_of(as_of: str) -> tuple[int, int]:

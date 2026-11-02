@@ -62,12 +62,14 @@ def utilization(
 
 
 def utilization_curve(monthly: pd.DataFrame, as_of: str, dept: str | None = None,
-                      cat: str | None = None) -> pd.DataFrame:
+                      cat: str | None = None, proj: str | None = None) -> pd.DataFrame:
     """Cumulative budget vs actual (% of full-year budget) by month, for the S-curve chart."""
     year, month = parse_as_of(as_of)
     df = monthly[monthly.year == year]
     if dept:
         df = df[df.dept_code == dept]
+    if proj:
+        df = df[df.proj_code == proj]
     if cat:
         df = df[df.cat_code == cat]
     m = df.groupby("month")[["budget", "actual"]].sum(min_count=1).reset_index()

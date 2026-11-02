@@ -34,15 +34,17 @@ def main() -> None:
     m, comm, annual = t["budget_actual_monthly"], t["commitments"], t["annual_budget"]
 
     budget = pd.DataFrame({
-        "年度": m.year, "月份": m.month, "部門": m.dept_name, "費用科目": m.cat_name,
+        "年度": m.year, "月份": m.month, "部門": m.dept_name, "專案": m.proj_name, "費用科目": m.cat_name,
         "預算": m.budget.round(0).astype("int64"),
         "實際": m.actual.where(m.is_closed).round(0),
     })
     budget["實際"] = budget["實際"].map(lambda v: "" if pd.isna(v) else str(int(v)))
-    names = m[["dept_code", "dept_name", "cat_code", "cat_name"]].drop_duplicates()
+    names = m[["dept_code", "dept_name", "proj_code", "proj_name", "cat_code", "cat_name"]].drop_duplicates()
     dn, cn = dict(zip(names.dept_code, names.dept_name)), dict(zip(names.cat_code, names.cat_name))
+    pn = dict(zip(names.proj_code, names.proj_name))
     commit = pd.DataFrame({
-        "年度": comm.year, "月份": comm.month, "部門": comm.dept_code.map(dn), "費用科目": comm.cat_code.map(cn),
+        "年度": comm.year, "月份": comm.month, "部門": comm.dept_code.map(dn), "專案": comm.proj_code.map(pn),
+        "費用科目": comm.cat_code.map(cn),
         "承諾金額": comm.committed_amount.astype("int64"),
     })
 
@@ -58,29 +60,34 @@ def main() -> None:
     # ---- expected values from the Python modules (keys use the names that appear in the CSV)
     res = forecast_year_end(m, AS_OF, comm)
     s = res.series
-    key = lambda d, c: f"{dn[d]}|{cn[c]}"  # noqa: E731
-    exp = {"as_of": AS_OF, "series": {}, "dept": {}, "one_offs": [], "variance": {}, "utilization": {},
-           "history": {}, "spikes": []}
+    key = lambda d, p, c: f"{dn[d]}|{pn[p]}|{cn[c]}"  # noqa: E731
+    exp = {"as_of": AS_OF, "series": {}, "dept": {}, "proj": {}, "one_offs": [], "variance": {}, "utilization": {},
+           "history": {}, "history_dept_cat": {}, "spikes": []}
     for r in s.itertuples():
-        exp["series"][key(r.dept_code, r.cat_code)] = {
+        exp["series"][key(r.dept_code, r.proj_code, r.cat_code)] = {
             "fy_forecast": r.fy_forecast, "sd": r.sd, "p_over": r.p_over, "risk": r.risk,
             "f_ensemble": r.f_ensemble, "commit_binding": bool(r.commit_binding), "lo": r.lo, "hi": r.hi,
         }
     for r in aggregate(s, "dept").itertuples():
         exp["dept"][dn[r.dept_code]] = {"fy_forecast": r.fy_forecast, "sd": r.sd, "p_over": r.p_over, "risk": r.risk}
+    for r in aggregate(s, "proj").itertuples():
+        exp["proj"][f"{dn[r.dept_code]}|{pn[r.proj_code]}"] = {"fy_forecast": r.fy_forecast, "sd": r.sd, "p_over": r.p_over,
+                                                              "risk": r.risk}
     for r in res.one_offs.itertuples():
-        exp["one_offs"].append({"dept": dn[r.dept_code], "cat": cn[r.cat_code], "period": r.period,
+        exp["one_offs"].append({"dept": dn[r.dept_code], "proj": pn[r.proj_code], "cat": cn[r.cat_code], "period": r.period,
                                 "one_off_amount": r.one_off_amount})
     for w in ("month", "ytd"):
         v = compute_variance(m, AS_OF, "dept", w)
         exp["variance"][w] = {dn[r.dept_code]: {"variance": r.variance, "material": bool(r.is_material)} for r in v.itertuples()}
     for r in utilization(m, AS_OF, "dept").itertuples():
         exp["utilization"][dn[r.dept_code]] = {"pace": r.pace_index, "status": r.status, "required": r.required_run_rate}
-    prof = execution_profile(annual, m, 2026, "dept_cat")
-    for r in prof.itertuples():
-        exp["history"][key(r.dept_code, r.cat_code)] = {"mean": r.mean_rate, "tags": r.tags, "q4_gap": r.q4_gap}
+    for r in execution_profile(annual, m, 2026, "series").itertuples():
+        exp["history"][key(r.dept_code, r.proj_code, r.cat_code)] = {"mean": r.mean_rate, "tags": r.tags, "q4_gap": r.q4_gap}
+    for r in execution_profile(annual, m, 2026, "dept_cat").itertuples():
+        exp["history_dept_cat"][f"{dn[r.dept_code]}|{cn[r.cat_code]}"] = {"mean": r.mean_rate, "tags": r.tags}
     for r in flag_spikes(m, AS_OF).itertuples():
-        exp["spikes"].append({"dept": dn[r.dept_code], "cat": cn[r.cat_code], "period": r.period, "pattern": r.pattern})
+        exp["spikes"].append({"dept": dn[r.dept_code], "proj": pn[r.proj_code], "cat": cn[r.cat_code], "period": r.period,
+                              "pattern": r.pattern})
 
     fx = ROOT / "tests" / "fixtures"
     fx.mkdir(parents=True, exist_ok=True)

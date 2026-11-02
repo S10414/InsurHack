@@ -3,7 +3,7 @@ Walk-forward back-test of the year-end forecast.
 
 For each closed target year and as-of month, the forecast only sees data up to that month, and its
 weights are fitted on *earlier* years only. Error metric: WAPE = sum|forecast - actual| / sum(actual)
-of the full-year spend (series = dept x category, dept = aggregated to department).
+of the full-year spend (series = dept x project x category, dept = aggregated to department).
 """
 from __future__ import annotations
 

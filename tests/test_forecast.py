@@ -66,3 +66,21 @@ def test_close_to_holdout(t, res):
     err = (d.fy_forecast / truth - 1).abs()
     assert abs(res.series.fy_forecast.sum() / truth.sum() - 1) < 0.03
     assert (err.drop("IT") < 0.05).all()                  # IT project catch-up is the known miss
+
+
+def test_project_drilldown(t, res):
+    """The planted problems sit in specific projects; sibling projects in the same department stay green,
+    and a department total can hide a project-level problem (marketing)."""
+    p = aggregate(res.series, "proj").set_index("proj_code")
+    assert p.loc["IT-CORE", "risk"] == "黃燈・預計大幅未執行" and p.loc["IT-OPS", "risk"].startswith("綠燈")
+    assert p.loc["CLM-INV", "risk"].startswith("紅燈") and p.loc["CLM-OPS", "risk"].startswith("綠燈")
+    assert p.loc["FIN-ICS", "risk"].startswith("紅燈") and p.loc["FIN-OPS", "risk"].startswith("綠燈")
+    assert p.loc["SALES-AGENCY", "gap"] > 5 * p.loc["SALES-BANCA", "gap"]      # agency drives the overrun
+    d = aggregate(res.series, "dept").set_index("dept_code")
+    assert d.loc["MKTG", "risk"].startswith("綠燈") and p.loc["MKTG-BRAND", "risk"].startswith("紅燈")
+    # project totals add up to department totals
+    s = p.groupby("dept_code")[["fy_budget", "fy_forecast"]].sum()
+    assert np.allclose(s.loc[d.index].to_numpy(), d[["fy_budget", "fy_forecast"]].to_numpy())
+    truth = t["holdout"].groupby("proj_code").actual.sum()
+    err = (p.fy_forecast / truth - 1).abs()
+    assert (err.drop(["IT-CORE", "CLM-INV"]) < 0.03).all()

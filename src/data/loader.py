@@ -20,7 +20,7 @@ def load(data_dir: str | Path | None = None, include_holdout: bool = False) -> d
         raise FileNotFoundError(f"No data in {d}. Run: python src/data/generator.py")
 
     out: dict[str, object] = {}
-    for name in ["departments", "categories", "budget_actual_monthly", "annual_budget", "commitments"]:
+    for name in ["departments", "projects", "categories", "budget_actual_monthly", "annual_budget", "commitments"]:
         out[name] = pd.read_csv(d / f"{name}.csv", encoding="utf-8-sig")
     out["budget_actual_monthly"]["is_closed"] = out["budget_actual_monthly"]["is_closed"].astype(bool)
     for name in ["metadata", "scenarios"]:

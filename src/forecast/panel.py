@@ -20,6 +20,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from ..analysis import LEVELS, SERIES
+
 METHODS = ["pace", "recent", "seasonal", "hist_rate"]
 METHOD_LABELS = {
     "pace": "年累計進度法",
@@ -31,7 +33,7 @@ METHOD_LABELS = {
 
 @dataclass
 class Panel:
-    keys: pd.DataFrame      # one row per dept x category: dept_code, dept_name, cat_code, cat_name
+    keys: pd.DataFrame      # one row per budget line: dept, project, category (codes and names)
     years: list[int]
     B: np.ndarray           # budget  (K, Y, 12)
     A: np.ndarray           # actual  (K, Y, 12), NaN where not yet closed
@@ -42,11 +44,11 @@ class Panel:
 
 
 def build_panel(monthly: pd.DataFrame) -> Panel:
-    cols = ["dept_code", "dept_name", "cat_code", "cat_name"]
-    keys = monthly[cols].drop_duplicates().sort_values(["dept_code", "cat_code"]).reset_index(drop=True)
+    cols = LEVELS["series"]
+    keys = monthly[cols].drop_duplicates().sort_values(SERIES).reset_index(drop=True)
     years = sorted(monthly.year.unique().tolist())
-    kmap = {(d, c): i for i, (d, c) in enumerate(zip(keys.dept_code, keys.cat_code))}
-    ki = np.fromiter((kmap[(d, c)] for d, c in zip(monthly.dept_code, monthly.cat_code)), int, len(monthly))
+    kmap = {k: i for i, k in enumerate(zip(*(keys[c] for c in SERIES)))}
+    ki = np.fromiter((kmap[k] for k in zip(*(monthly[c] for c in SERIES))), int, len(monthly))
     yi = monthly.year.map({y: i for i, y in enumerate(years)}).to_numpy()
     mi = monthly.month.to_numpy() - 1
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import keys_for, parse_as_of, safe_div, with_scope
+from . import SERIES, keys_for, parse_as_of, safe_div, with_scope
 
 
 def _window_months(month: int, window: str) -> range:
@@ -57,6 +57,7 @@ def variance_trend(
     dept: str | None = None,
     cat: str | None = None,
     months: int = 24,
+    proj: str | None = None,
 ) -> pd.DataFrame:
     """Monthly budget / actual / variance for the last `months` closed months (crosses years).
 
@@ -68,6 +69,8 @@ def variance_trend(
     df = df[(df.year < year) | (df.month <= month)]
     if dept:
         df = df[df.dept_code == dept]
+    if proj:
+        df = df[df.proj_code == proj]
     if cat:
         df = df[df.cat_code == cat]
 
@@ -94,7 +97,7 @@ def waterfall_frame(
     """
     df = monthly if dept is None else monthly[monthly.dept_code == dept]
     var = compute_variance(df, as_of, level=by, window=window)
-    name_col = "dept_name" if by == "dept" else "cat_name"
+    name_col = {"dept": "dept_name", "proj": "proj_name", "cat": "cat_name"}[by]
 
     head, tail = var.head(top_n), var.iloc[top_n:]
     rows = [{"label": "預算", "value": var.budget.sum(), "measure": "absolute"}]
@@ -112,16 +115,18 @@ def flag_spikes(
     z_threshold: float = 3.0,
     lookback: int = 12,
 ) -> pd.DataFrame:
-    """Find dept x category months of the current year with abnormal spend.
+    """Find budget-line (dept x project x category) months of the current year with abnormal spend.
 
     A month is a spike when actual >= ratio_threshold x budget AND its actual is z_threshold
     standard deviations above the series' own trailing `lookback` months.
-    pattern = '單月異常' (one-off: neighbours are normal) or '持續偏高' (a run of spikes).
+    pattern = '單月異常' (one-off: spend returns to normal) or '持續偏高' (the level has shifted):
+    persistent when a neighbouring month is also >= ratio_threshold x budget, or the following
+    (up to 3, closed) months average >= 1 + (ratio_threshold - 1) / 2 x budget.
     """
     year, month = parse_as_of(as_of)
     df = monthly[monthly.is_closed & ((monthly.year < year) | (monthly.month <= month))].copy()
-    df = df.sort_values(["dept_code", "cat_code", "period"])
-    g = df.groupby(["dept_code", "cat_code"]).actual
+    df = df.sort_values(SERIES + ["period"])
+    g = df.groupby(SERIES).actual
     prior_mean = g.transform(lambda s: s.shift(1).rolling(lookback, min_periods=6).mean())
     prior_std = g.transform(lambda s: s.shift(1).rolling(lookback, min_periods=6).std())
 
@@ -132,10 +137,12 @@ def flag_spikes(
     # Persistent vs one-off: look at whether neighbouring months are also far above budget.
     # (After the first spike the trailing mean adapts, so z alone would miss the follow-on months.)
     df["_high"] = df.ratio >= ratio_threshold
-    hg = df.groupby(["dept_code", "cat_code"])._high
+    hg = df.groupby(SERIES)._high
     neighbour = hg.shift(1, fill_value=False) | hg.shift(-1, fill_value=False)
-    df["pattern"] = np.where(neighbour, "持續偏高", "單月異常")
+    after = df.groupby(SERIES).ratio.transform(lambda s: s[::-1].shift(1).rolling(3, min_periods=1).mean()[::-1])
+    stays_high = after >= 1 + (ratio_threshold - 1) / 2
+    df["pattern"] = np.where(neighbour | stays_high, "持續偏高", "單月異常")
 
     out = df[df.is_spike & (df.year == year)]
-    cols = ["period", "dept_code", "dept_name", "cat_code", "cat_name", "budget", "actual", "ratio", "z", "pattern"]
+    cols = ["period", "dept_code", "dept_name", "proj_code", "proj_name", "cat_code", "cat_name", "budget", "actual", "ratio", "z", "pattern"]
     return out[cols].reset_index(drop=True)

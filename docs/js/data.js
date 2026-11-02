@@ -1,9 +1,9 @@
 /*
  * CSV parsing, column mapping and validation for budget / commitment files.
  *
- * Budget file columns (Chinese or English headers):  年度/year, 月份/month, 部門/dept, 費用科目/category,
- *   預算/budget, 實際/actual   (actual left blank for months that are not closed yet)
- * Commitment file columns: 年度, 月份, 部門, 費用科目, 承諾金額/committed_amount
+ * Budget file columns (Chinese or English headers):  年度/year, 月份/month, 部門/dept, 專案/project (optional),
+ *   費用科目/category, 預算/budget, 實際/actual   (actual left blank for months that are not closed yet)
+ * Commitment file columns: 年度, 月份, 部門, 專案 (optional), 費用科目, 承諾金額/committed_amount
  */
 (function (root) {
   'use strict';
@@ -28,16 +28,16 @@
 
   const ALIASES = {
     year: ['年度', '年', 'year'], month: ['月份', '月', 'month'], dept: ['部門', 'dept', 'department', 'dept_name'],
+    proj: ['專案', '專案名稱', '計畫', 'project', 'proj', 'proj_name', 'project_name', '成本中心', 'cost_center'],
     cat: ['費用科目', '科目', 'category', 'cat', 'cat_name'], budget: ['預算', 'budget', '預算金額'],
     actual: ['實際', 'actual', '實際金額', '實際支出'], amount: ['承諾金額', 'committed_amount', 'amount', '金額'],
   };
 
-  function mapColumns(header, need) {
+  function mapColumns(header, need, optional = []) {
     const idx = {}, missing = [];
-    for (const f of need) {
-      const i = header.findIndex((h) => ALIASES[f].includes(h.trim().toLowerCase()) || ALIASES[f].includes(h.trim()));
-      if (i < 0) missing.push(ALIASES[f][0]); else idx[f] = i;
-    }
+    const find = (f) => header.findIndex((h) => ALIASES[f].includes(h.trim().toLowerCase()) || ALIASES[f].includes(h.trim()));
+    for (const f of need) { const i = find(f); if (i < 0) missing.push(ALIASES[f][0]); else idx[f] = i; }
+    for (const f of optional) { const i = find(f); if (i >= 0) idx[f] = i; }
     return { idx, missing };
   }
 
@@ -46,14 +46,15 @@
   function parseBudget(text) {
     const t = parseCSV(text), issues = [];
     if (t.length < 2) return { rows: [], issues: ['檔案沒有資料列'] };
-    const { idx, missing } = mapColumns(t[0], ['year', 'month', 'dept', 'cat', 'budget', 'actual']);
+    const { idx, missing } = mapColumns(t[0], ['year', 'month', 'dept', 'cat', 'budget', 'actual'], ['proj']);
     if (missing.length) return { rows: [], issues: ['找不到欄位：' + missing.join('、')] };
     const rows = []; let bad = 0;
     for (let i = 1; i < t.length; i++) {
       const r = t[i], year = num(r[idx.year]), month = num(r[idx.month]), budget = num(r[idx.budget]), actual = num(r[idx.actual]);
       const dept = (r[idx.dept] || '').trim(), cat = (r[idx.cat] || '').trim();
+      const proj = idx.proj === undefined ? '' : (r[idx.proj] || '').trim();
       if (!dept || !cat || !Number.isInteger(year) || !(month >= 1 && month <= 12) || budget === null || Number.isNaN(budget) || Number.isNaN(actual)) { bad++; continue; }
-      rows.push({ year, month, dept, cat, budget, actual });
+      rows.push({ year, month, dept, proj, cat, budget, actual });
     }
     if (bad) issues.push(`${bad} 列格式不正確，已略過（年度、月份、部門、科目、預算必填，金額需為數字）`);
     return { rows, issues };
@@ -62,13 +63,13 @@
   function parseCommitments(text) {
     const t = parseCSV(text), issues = [];
     if (t.length < 2) return { rows: [], issues: [] };
-    const { idx, missing } = mapColumns(t[0], ['year', 'month', 'dept', 'cat', 'amount']);
+    const { idx, missing } = mapColumns(t[0], ['year', 'month', 'dept', 'cat', 'amount'], ['proj']);
     if (missing.length) return { rows: [], issues: ['承諾支出檔找不到欄位：' + missing.join('、')] };
     const rows = [];
     for (let i = 1; i < t.length; i++) {
       const r = t[i], year = num(r[idx.year]), month = num(r[idx.month]), amount = num(r[idx.amount]);
       if (!Number.isInteger(year) || !(month >= 1 && month <= 12) || !(amount > 0)) continue;
-      rows.push({ year, month, dept: (r[idx.dept] || '').trim(), cat: (r[idx.cat] || '').trim(), amount });
+      rows.push({ year, month, dept: (r[idx.dept] || '').trim(), proj: idx.proj === undefined ? '' : (r[idx.proj] || '').trim(), cat: (r[idx.cat] || '').trim(), amount });
     }
     return { rows, issues };
   }
@@ -77,25 +78,28 @@
   function inspect(rows) {
     const issues = [], years = [...new Set(rows.map((r) => r.year))].sort((a, b) => a - b);
     const depts = [...new Set(rows.map((r) => r.dept))], cats = [...new Set(rows.map((r) => r.cat))];
-    if (!rows.length) return { years, depts, cats, issues: ['沒有可用資料'], lastYear: null, lastClosed: 0 };
+    const projs = [...new Set(rows.filter((r) => r.proj).map((r) => r.dept + '\u0001' + r.proj))];
+    if (!rows.length) return { years, depts, cats, projs, issues: ['沒有可用資料'], lastYear: null, lastClosed: 0 };
     const lastYear = years[years.length - 1];
     let lastClosed = 0;
     for (const r of rows) if (r.year === lastYear && r.actual !== null && r.month > lastClosed) lastClosed = r.month;
     if (years.length < 2) issues.push('只有一個年度：歷史季節與歷史執行率法無法使用，預測精度會較低。');
     else if (years.length < 3) issues.push('只有兩個年度：加權組合無法用歷史回測調整權重，將採等權重。建議至少三年資料。');
     const seen = new Map();
-    for (const r of rows) { const k = [r.year, r.month, r.dept, r.cat].join('|'); seen.set(k, (seen.get(k) || 0) + 1); }
+    for (const r of rows) { const k = [r.year, r.month, r.dept, r.proj, r.cat].join('|'); seen.set(k, (seen.get(k) || 0) + 1); }
     const dup = [...seen.values()].filter((v) => v > 1).length;
-    if (dup) issues.push(`${dup} 組年度×月份×部門×科目重複，系統會加總處理。`);
+    if (dup) issues.push(`${dup} 組年度×月份×部門×專案×科目重複，系統會加總處理。`);
+    const partial = rows.some((r) => r.proj) && rows.some((r) => !r.proj);
+    if (partial) issues.push('部分資料列沒有填專案，這些列會歸在各部門的「未分專案」。');
     if (lastClosed === 0) issues.push('最新年度沒有任何實際數，無法預測。');
     if (lastClosed >= 12) issues.push('最新年度已全部結帳（12 個月），預測功能需選擇較早的截止月份。');
     const prior = rows.filter((r) => r.year < lastYear && r.actual === null).length;
     if (prior) issues.push(`以往年度有 ${prior} 列沒有實際數，歷史分析可能失真。`);
-    return { years, depts, cats, issues, lastYear, lastClosed };
+    return { years, depts, cats, projs, issues, lastYear, lastClosed };
   }
 
-  const TEMPLATE = '年度,月份,部門,費用科目,預算,實際\n2025,1,資訊科技部,資訊軟硬體,5000000,4800000\n2026,1,資訊科技部,資訊軟硬體,5200000,5100000\n2026,12,資訊科技部,資訊軟硬體,6000000,\n';
-  const COMMIT_TEMPLATE = '年度,月份,部門,費用科目,承諾金額\n2026,11,資訊科技部,資訊軟硬體,3000000\n';
+  const TEMPLATE = '年度,月份,部門,專案,費用科目,預算,實際\n2025,1,資訊科技部,核心系統換版,資訊軟硬體,5000000,4800000\n2026,1,資訊科技部,核心系統換版,資訊軟硬體,5200000,5100000\n2026,12,資訊科技部,核心系統換版,資訊軟硬體,6000000,\n2026,12,資訊科技部,系統維運,人事費用,9000000,\n';
+  const COMMIT_TEMPLATE = '年度,月份,部門,專案,費用科目,承諾金額\n2026,11,資訊科技部,核心系統換版,資訊軟硬體,3000000\n';
 
   const api = { parseCSV, parseBudget, parseCommitments, inspect, TEMPLATE, COMMIT_TEMPLATE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.FPAData = api;

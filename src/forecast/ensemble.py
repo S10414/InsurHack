@@ -1,7 +1,7 @@
 """
 Year-end forecast = weighted blend of the four methods, floored by signed commitments.
 
-Weights: each dept x category series gets weights proportional to the inverse of its own back-test
+Weights: each budget line (dept x project x category) gets weights proportional to the inverse of its own back-test
 squared error (shrunk 50% toward the all-series average, because only two closed years are available).
 Uncertainty: the blend's back-test error, pooled by expense category, scales with the remaining budget.
 Intervals add series variances as if independent, which understates risk for correlated units.
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from ..analysis import keys_for, parse_as_of, with_scope
+from ..analysis import SERIES, keys_for, parse_as_of, with_scope
 from ..analysis.variance import flag_spikes
 from .panel import METHODS, Panel, build_panel, method_factors, true_factor
 
@@ -24,7 +24,7 @@ Z80 = 1.2816  # two-sided 80% interval
 @dataclass
 class ForecastResult:
     as_of: str
-    series: pd.DataFrame      # one row per dept x category
+    series: pd.DataFrame      # one row per budget line (dept x project x category)
     path: pd.DataFrame        # long monthly: budget / actual / forecast and cumulative uncertainty
     weights: pd.DataFrame     # method weights per series
     n_backtest_samples: int
@@ -81,9 +81,9 @@ def _commitment_array(P: Panel, commitments: pd.DataFrame | None, year: int) -> 
     C = np.zeros((P.K, 12))
     if commitments is None or commitments.empty:
         return C
-    kmap = {(d, c): i for i, (d, c) in enumerate(zip(P.keys.dept_code, P.keys.cat_code))}
+    kmap = {k: i for i, k in enumerate(zip(*(P.keys[c] for c in SERIES)))}
     for r in commitments[commitments.year == year].itertuples():
-        C[kmap[(r.dept_code, r.cat_code)], r.month - 1] += r.committed_amount
+        C[kmap[(r.dept_code, r.proj_code, r.cat_code)], r.month - 1] += r.committed_amount
     return C
 
 
@@ -103,18 +103,19 @@ def normalize_one_offs(monthly: pd.DataFrame, as_of: str) -> tuple[pd.DataFrame,
     adj = monthly.copy()
     log = []
     for r in spikes.itertuples():
-        mask = ((adj.year == year) & (adj.dept_code == r.dept_code) & (adj.cat_code == r.cat_code))
+        mask = ((adj.year == year) & (adj.dept_code == r.dept_code) & (adj.proj_code == r.proj_code)
+                & (adj.cat_code == r.cat_code))
         month = int(r.period[-2:])
         cur = adj[mask & adj.is_closed & (adj.month <= as_month)]
         others = cur[cur.month != month]
         normal_ratio = float((others.actual / others.budget).median())
         i = adj[mask & (adj.month == month)].index[0]
         new_actual = adj.at[i, "budget"] * normal_ratio
-        log.append({"period": r.period, "dept_code": r.dept_code, "cat_code": r.cat_code,
+        log.append({"period": r.period, "dept_code": r.dept_code, "proj_code": r.proj_code, "cat_code": r.cat_code,
                     "actual": adj.at[i, "actual"], "normalized_actual": new_actual,
                     "one_off_amount": adj.at[i, "actual"] - new_actual})
         adj.at[i, "actual"] = new_actual
-    return adj, pd.DataFrame(log, columns=["period", "dept_code", "cat_code", "actual",
+    return adj, pd.DataFrame(log, columns=["period", "dept_code", "proj_code", "cat_code", "actual",
                                            "normalized_actual", "one_off_amount"])
 
 
@@ -167,14 +168,14 @@ def forecast_year_end(monthly: pd.DataFrame, as_of: str, commitments: pd.DataFra
         for mm in range(12):
             closed = mm < m
             rows.append({
-                "dept_code": P.keys.dept_code[k], "cat_code": P.keys.cat_code[k],
+                "dept_code": P.keys.dept_code[k], "proj_code": P.keys.proj_code[k], "cat_code": P.keys.cat_code[k],
                 "year": year, "month": mm + 1,
                 "budget": B[k, mm],
                 "actual": P.A[k, yi, mm] if closed else np.nan,
                 "forecast": np.nan if closed else rem_month[k, mm - m],
                 "sd_cum": 0.0 if closed else sigma[k] * cum_rem_b[k, mm - m],
             })
-    wdf = P.keys[["dept_code", "cat_code"]].copy()
+    wdf = P.keys[SERIES].copy()
     for j, name in enumerate(METHODS):
         wdf[name] = W[:, j]
     return ForecastResult(as_of, finish(s), pd.DataFrame(rows), wdf, n, one_offs)

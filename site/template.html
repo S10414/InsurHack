@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardif FP&A Copilot｜預算分析與差異分析助手</title>
+<meta name="description" content="2026 Cardif InsurHack 題目 6-1：各部門費用預算追蹤、年底執行結果預測與預警（模擬資料展示）">
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--ink:#16202b;--mute:#5d6b7a;--line:#e3e7ec;--accent:#00704a;--accent-soft:#e1f2ea;
+  --budget:#8794a3;--red:#b3261e;--red-bg:#fbe9e7;--amber:#8a5a00;--amber-bg:#fff3d6;--green:#1b6b3a;--green-bg:#e3f4e8;--info:#1f5fa8;--info-bg:#e6f0fb;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f151b;--card:#18212a;--ink:#e8edf2;--mute:#9aa8b6;--line:#2a3541;--accent:#3ecf9a;--accent-soft:#17352b;
+  --budget:#8794a3;--red:#ff8a80;--red-bg:#3b1f1d;--amber:#f5c15a;--amber-bg:#3a2e12;--green:#7fd6a0;--green-bg:#17301f;--info:#8ab8f0;--info-bg:#18283d;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 56px}
+header{padding:28px 0 8px}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:17px;margin:32px 0 12px}
+.sub{color:var(--mute);margin:0}
+.banner{background:var(--info-bg);color:var(--info);border-radius:8px;padding:8px 12px;font-size:13px;margin-top:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:20px}
+.kpi,.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.kpi{padding:14px 16px}
+.kpi .l{font-size:12px;color:var(--mute)}
+.kpi .v{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .n{font-size:12px;color:var(--mute)}
+.card{padding:16px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--mute);font-weight:600}
+th:first-child,td:first-child{text-align:left}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover{background:var(--accent-soft)}
+tbody tr.sel{background:var(--accent-soft)}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.pill.red{background:var(--red-bg);color:var(--red)}
+.pill.amber{background:var(--amber-bg);color:var(--amber)}
+.pill.green{background:var(--green-bg);color:var(--green)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+.bar{position:relative;width:120px;height:10px;background:var(--line);border-radius:5px;display:inline-block;vertical-align:middle}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--accent)}
+.bar b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.grid2{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:4px 0 8px}
+.legend span::before{content:"";display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+.lg-b::before{border-color:var(--budget)}.lg-a::before{border-color:var(--accent)}.lg-f::before{border-color:var(--accent);border-top-style:dashed}
+.lg-band::before{border-color:var(--accent-soft);border-top-width:8px}
+svg text{fill:var(--mute);font-size:11px}
+.tip{font-size:12px;color:var(--mute);min-height:20px;margin-top:4px}
+.alert{border-left:4px solid var(--line);padding:10px 14px;margin-bottom:10px;background:var(--card);border-radius:0 8px 8px 0;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.alert.red{border-left-color:var(--red)}.alert.amber{border-left-color:var(--amber)}.alert.info{border-left-color:var(--info)}
+.alert .t{font-weight:700}.alert .x{color:var(--mute);font-size:14px;margin-top:2px}
+.alert .t span{margin-right:8px}
+select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+.small{font-size:12px;color:var(--mute)}
+footer{margin-top:40px;color:var(--mute);font-size:13px}
+a{color:var(--accent)}
+.hl{font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Cardif FP&amp;A Copilot</h1>
+  <p class="sub">各部門費用預算追蹤・年底執行結果預測・超支與落後預警　｜　2026 Cardif InsurHack 題目 6-1</p>
+  <div class="banner" id="banner"></div>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<h2>部門總覽 <span class="small">（點選一列查看明細）</span></h2>
+<div class="card tablewrap"><table id="depttable"></table></div>
+<p class="small">執行率 = 年累計實際 ÷ 全年預算；黑線為「預算同期進度」（依預算自己的月份分佈，而不是平均 1/12）。預測區間為 80%。</p>
+
+<h2 id="detailtitle">明細</h2>
+<div class="grid2">
+  <div class="card">
+    <div class="legend"><span class="lg-b">累計預算</span><span class="lg-a">累計實際</span><span class="lg-f">預測</span><span class="lg-band">80% 區間</span></div>
+    <div id="chart"></div>
+    <div class="tip" id="tip">滑鼠移到圖上查看各月數字</div>
+  </div>
+  <div class="card" id="sidecard"></div>
+</div>
+<div class="card tablewrap" style="margin-top:16px"><table id="cattable"></table></div>
+
+<h2>預警與提示</h2>
+<div id="alerts"></div>
+
+<h2>預測準確度（回測）</h2>
+<div class="card">
+  <p class="small" style="margin-top:0" id="btnote"></p>
+  <div class="tablewrap"><table id="bttable"></table></div>
+  <p class="small" id="btmonth"></p>
+</div>
+
+<h2>方法說明</h2>
+<div class="card">
+  <ol style="margin:0;padding-left:20px">
+    <li><b>四種推估</b>：年累計進度法、近三月趨勢法、歷史季節型態法、歷史執行率法；各自推估「剩餘預算會被用掉幾成」，再乘上剩餘月份各自的預算。</li>
+    <li><b>加權組合</b>：每個部門×科目依回測誤差決定權重（與整體平均各占一半，避免只有兩年資料而過度擬合）。</li>
+    <li><b>承諾支出</b>：已簽約未付款的金額視為剩餘各月的下限。</li>
+    <li><b>一次性支出</b>：單月異常會計入實際數，但不外推到後續月份。</li>
+    <li><b>區間與機率</b>：以回測誤差依科目估計；部門層級假設各科目獨立，對相關性高的單位可能偏窄。</li>
+  </ol>
+</div>
+
+<footer>
+  資料全部為模擬，與法國巴黎人壽任何內部資料無關。建置日期 <span id="built"></span>。
+  原始碼與測試：<a id="repo" href="#">GitHub</a>　｜　此頁為靜態展示；AI 摘要與自然語言查詢將於完整版加入。
+</footer>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const $ = s => document.querySelector(s);
+const M = x => x == null ? "–" : (x/1e6).toLocaleString("zh-TW",{maximumFractionDigits:1});
+const P = (x,d=0) => x == null ? "–" : (x*100).toFixed(d)+"%";
+const riskClass = r => r.startsWith("紅") ? "red" : r.startsWith("黃") ? "amber" : "green";
+const pill = (r) => `<span class="pill ${riskClass(r)}">${r}</span>`;
+const bar = (u, phased) => `<span class="bar"><i style="width:${Math.min(100,u*100)}%"></i><b style="left:${Math.min(100,phased*100)}%"></b></span>`;
+let selected = null;
+
+$("#built").textContent = D.meta.built;
+$("#repo").href = D.meta.repo;
+$("#banner").textContent = `資料截至 ${D.meta.as_of}（已結帳 ${D.meta.month} 個月）｜單位：百萬元新台幣｜示範用模擬資料`;
+
+function kpis(){
+  const t = D.total, over = D.depts.filter(d=>d.risk.startsWith("紅")).length, amber = D.depts.filter(d=>d.risk.startsWith("黃")).length;
+  const items = [
+    ["全年預算", M(t.fy_budget), "全公司 "+D.meta.n_depts+" 個部門"],
+    ["年累計實際", M(t.ytd_actual), "執行率 "+P(t.ytd_actual/t.fy_budget,1)+"，同期預算 "+P(t.ytd_budget/t.fy_budget,1)],
+    ["預測全年", M(t.fy_forecast), "為預算的 "+P(t.fy_rate,1)+"（區間 "+P(t.lo/t.fy_budget)+"～"+P(t.hi/t.fy_budget)+"）"],
+    ["預計差異", (t.gap>=0?"+":"")+M(t.gap), t.gap>=0?"預計超支":"預計結餘"],
+    ["需關注部門", `${over} 紅 / ${amber} 黃`, "其餘為綠燈"],
+  ];
+  $("#kpis").innerHTML = items.map(([l,v,n])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join("");
+}
+
+function deptTable(){
+  const head = `<thead><tr><th>部門</th><th>全年預算</th><th>年累計實際</th><th>執行率 / 同期進度</th><th>預測全年</th><th>預測÷預算</th><th>80% 區間</th><th>超支機率</th><th>燈號</th></tr></thead>`;
+  const rows = D.depts.map(d=>`<tr class="click ${selected===d.code?"sel":""}" data-c="${d.code}">
+    <td>${d.name}</td><td>${M(d.fy_budget)}</td><td>${M(d.ytd_actual)}</td>
+    <td>${bar(d.utilization,d.phased_progress)} <span class="small">${P(d.utilization)} / ${P(d.phased_progress)}</span></td>
+    <td>${M(d.fy_forecast)}</td><td class="hl">${P(d.fy_rate,1)}</td>
+    <td class="small">${P(d.lo/d.fy_budget)}～${P(d.hi/d.fy_budget)}</td><td>${P(d.p_over)}</td><td>${pill(d.risk)}</td></tr>`).join("");
+  $("#depttable").innerHTML = head + "<tbody>"+rows+"</tbody>";
+  document.querySelectorAll("#depttable tr.click").forEach(tr=>tr.onclick=()=>select(tr.dataset.c));
+}
+
+function chart(path){
+  const W=640,H=300,L=52,R=14,T=12,B=28, m=D.meta.month;
+  const xs = i => L + (W-L-R)*(i/11);
+  const all = [...path.budget,...path.hi,...path.actual];
+  const ymax = Math.max(...all)*1.04;
+  const ys = v => T + (H-T-B)*(1-v/ymax);
+  const line = (arr,off=0)=>arr.map((v,i)=>`${i?"L":"M"}${xs(i+off).toFixed(1)},${ys(v).toFixed(1)}`).join("");
+  const ticks = [0,.25,.5,.75,1].map(f=>f*ymax);
+  const unit = ymax>=1e9 ? [1e9,"十億"] : [1e6,"百萬"];
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="累計預算、實際與預測">`;
+  ticks.forEach(v=>{ s+=`<line x1="${L}" x2="${W-R}" y1="${ys(v)}" y2="${ys(v)}" stroke="var(--line)"/><text x="${L-6}" y="${ys(v)+4}" text-anchor="end">${(v/unit[0]).toFixed(unit[0]>=1e9?1:0)}</text>`; });
+  for(let i=0;i<12;i++) s+=`<text x="${xs(i)}" y="${H-8}" text-anchor="middle">${i+1}月</text>`;
+  s+=`<text x="${L}" y="9" text-anchor="start">${unit[1]}元</text>`;
+  // band: starts at last actual
+  const lo=[path.actual[m-1],...path.lo], hi=[path.actual[m-1],...path.hi];
+  const upper = hi.map((v,i)=>`${i?"L":"M"}${xs(i+m-1).toFixed(1)},${ys(v).toFixed(1)}`).join("");
+  const lower = lo.map((v,i)=>`L${xs(i+m-1).toFixed(1)},${ys(v).toFixed(1)}`).reverse().join("");
+  s+=`<path d="${upper}${lower}Z" fill="var(--accent)" opacity=".16"/>`;
+  s+=`<path d="${line(path.budget)}" fill="none" stroke="var(--budget)" stroke-width="2.5"/>`;
+  s+=`<path d="${line(path.actual)}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>`;
+  s+=`<path d="${line([path.actual[m-1],...path.forecast],m-1)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="6 4"/>`;
+  s+=`<line x1="${xs(m-1)}" x2="${xs(m-1)}" y1="${T}" y2="${H-B}" stroke="var(--mute)" stroke-dasharray="2 3"/>`;
+  s+=`<circle cx="${xs(11)}" cy="${ys(path.forecast[path.forecast.length-1])}" r="4" fill="var(--accent)"/>`;
+  s+=`<rect id="hover" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg>`;
+  $("#chart").innerHTML = s;
+  const rect = $("#hover");
+  rect.onmousemove = e=>{
+    const box = rect.getBoundingClientRect();
+    const i = Math.max(0,Math.min(11,Math.round((e.clientX-box.left)/box.width*11)));
+    const a = i<m ? `累計實際 ${M(path.actual[i])}` : `累計預測 ${M(path.forecast[i-m])}（${M(path.lo[i-m])}～${M(path.hi[i-m])}）`;
+    $("#tip").textContent = `${i+1} 月｜累計預算 ${M(path.budget[i])}｜${a}（百萬元）`;
+  };
+}
+
+function select(code){
+  selected = code; deptTable();
+  const d = D.depts.find(x=>x.code===code);
+  $("#detailtitle").textContent = `${d.name}・預算執行明細`;
+  chart(d.path);
+  const gap = d.gap;
+  $("#sidecard").innerHTML = `
+    <div>${pill(d.risk)}</div>
+    <p style="margin:10px 0 4px"><b>預測全年 ${M(d.fy_forecast)} 百萬元</b>，為預算的 ${P(d.fy_rate,1)}，
+      預計${gap>=0?"超支":"結餘"} ${M(Math.abs(gap))} 百萬元。</p>
+    <p class="small" style="margin:0 0 10px">80% 區間 ${M(d.lo)}～${M(d.hi)}；超支機率 ${P(d.p_over)}。</p>
+    <div class="small"><b>年累計進度</b>：${d.status}（實際為同期預算的 ${P(d.pace_index)}）</div>
+    <div class="small" style="margin-top:6px"><b>歷史型態</b>：${d.history}</div>
+    ${d.history_detail.length?`<ul class="small" style="margin:4px 0 0;padding-left:18px">${d.history_detail.map(x=>`<li>${x}</li>`).join("")}</ul>`:""}`;
+  const head = `<thead><tr><th>費用科目</th><th>全年預算</th><th>年累計實際</th><th>實際÷同期預算</th><th>預測全年</th><th>預測÷預算</th><th>80% 區間</th><th>超支機率</th><th>承諾支出(未付)</th><th>主要推估方法</th><th>燈號</th></tr></thead>`;
+  const rows = d.cats.map(c=>`<tr><td>${c.name}</td><td>${M(c.fy_budget)}</td><td>${M(c.ytd_actual)}</td><td>${P(c.pace_index)}</td>
+    <td>${M(c.fy_forecast)}</td><td class="hl">${P(c.fy_rate,1)}</td><td class="small">${P(c.lo/c.fy_budget)}～${P(c.hi/c.fy_budget)}</td>
+    <td>${P(c.p_over)}</td><td>${c.commit>0?M(c.commit)+(c.commit_binding?" ◆":""):"–"}</td><td class="small">${c.main_method}</td><td>${pill(c.risk)}</td></tr>`).join("");
+  $("#cattable").innerHTML = head+"<tbody>"+rows+"</tbody><caption class='small' style='caption-side:bottom;text-align:left;padding-top:6px'>◆ 承諾支出高於推估值，預測已以承諾支出為下限。</caption>";
+}
+
+function alerts(){
+  $("#alerts").innerHTML = D.alerts.map(a=>{
+    const c = a.level==="紅燈"?"red":a.level==="黃燈"?"amber":"info";
+    return `<div class="alert ${c}"><div class="t"><span class="pill ${c}">${a.level}</span>${a.title}</div><div class="x">${a.text}</div></div>`;
+  }).join("");
+}
+
+function backtest(){
+  const b = D.backtest;
+  $("#btnote").textContent = `以 ${b.year} 年為例：在 4、6、8、10 月底只用當時已有的資料預測全年，權重只用更早年度訓練；誤差為全年金額的加權平均絕對誤差（WAPE，越低越好）。`;
+  const best = b.summary[0].series;
+  $("#bttable").innerHTML = `<thead><tr><th>方法</th><th>科目層級誤差</th><th>部門層級誤差</th></tr></thead><tbody>`+
+    b.summary.map(r=>`<tr class="${r.model==="ensemble"?"sel":""}"><td>${r.label}</td><td class="hl">${P(r.series,1)}</td><td>${P(r.dept,1)}</td></tr>`).join("")+"</tbody>";
+  $("#btmonth").textContent = "加權組合在各月底的科目層級誤差：" + b.by_month.map(r=>`${r.m} 月 ${P(r.ensemble,1)}（預算 ${P(r.budget,1)}、線性外推 ${P(r.linear,1)}）`).join("；") + "。";
+}
+
+kpis(); deptTable(); alerts(); backtest();
+select((D.depts.find(d=>d.risk.startsWith("黃"))||D.depts[0]).code);
+</script>
+</body>
+</html>

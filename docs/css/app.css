@@ -167,10 +167,6 @@ td .sub{display:block;font-size:12px;color:var(--mute);line-height:1.3}
 @media(max-width:600px){.strip{height:50px}.seg{padding:5px 6px 8px}.seg .nm{font-size:11px}}
 @media(max-width:600px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi{padding:10px 12px}.kpi .v{font-size:19px}}
 
-/* drag-to-rotate */
-#field,.flow-wrap canvas{cursor:grab}
-#field.dragging,.flow-wrap canvas.dragging{cursor:grabbing}
-.hero-legend .hint{color:#7f8fa5;font-size:11px;max-width:7em;line-height:1.4}
 /* reallocation flow: same dark stage as the hero so the colours mean the same thing */
 .flow-card{background:var(--hero);color:var(--hero-ink);border-radius:10px;padding:14px 16px 12px;margin:6px 0 8px}
 .flow-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -191,7 +187,7 @@ td .sub{display:block;font-size:12px;color:var(--mute);line-height:1.3}
 .flow-legend li{display:flex;align-items:center;gap:6px}
 .flow-legend .hint{color:#7f8fa5;margin-left:auto}
 .flow-legend .tap{display:none}
-@media(max-width:600px){.flow-legend .tap{display:inline}}
+@media(max-width:600px){.flow-legend .tap{display:flex}}
 .flow-labels.compact .fw-bar{display:none}
 .flow-labels .fw-bar{transition:opacity .15s}.flow-labels .fw-bar.dim{opacity:.3!important}
 .sw.ghost{background:rgba(54,179,154,.2);outline:1px solid rgba(54,179,154,.6)}

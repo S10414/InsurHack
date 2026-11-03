@@ -734,7 +734,7 @@
       <div class="flow-wrap"><canvas aria-label="預算調配流向立體圖：左側為可釋出餘額，右側為預計超支缺口，中間的帶狀為每筆調配"></canvas>
         <div class="field-labels flow-labels"></div><div class="field-tip" hidden></div></div>
       <ul class="flow-legend"><li><i class="sw under"></i>可釋出餘額／調入金額</li><li><i class="sw over"></i>仍未補足的缺口</li>
-        <li><i class="sw ghost"></i>調出的部分</li><li><i class="sw xcat"></i>跨科目調配</li><li class="hint">左右拖曳可旋轉，雙擊回正<span class="tap">；點長條看項目名稱</span></li></ul>`;
+        <li><i class="sw ghost"></i>調出的部分</li><li><i class="sw xcat"></i>跨科目調配</li><li class="hint tap">點長條看項目名稱</li></ul>`;
     const canvas = el.querySelector('canvas'), tip = el.querySelector('.field-tip'), range = el.querySelector('input');
     flow = window.FPAFlow.create(canvas, el.querySelector('.flow-labels'), {
       reducedMotion: !MO.enabled,

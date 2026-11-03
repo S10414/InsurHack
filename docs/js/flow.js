@@ -4,11 +4,11 @@
  *   right column  = lines forecast to overrun; the gap (coral) fills up with teal as transfers arrive,
  *                   so whatever coral is left at the end is the gap that still needs extra budget
  *   ribbons       = one per transfer, width by amount, amber when it crosses expense categories
- * setPhase(0..1) moves from "before" to "after". Horizontal drag turns the view (shared orbit control).
+ * setPhase(0..1) moves from "before" to "after".
  */
 (function (root) {
   'use strict';
-  const { M4, compile, boxGeometry, orbit } = root.FPAField;
+  const { M4, compile, boxGeometry } = root.FPAField;
 
   const BVS = `#version 300 es
   layout(location=0) in vec3 aPos;
@@ -125,13 +125,13 @@
 
     const st = {
       bars: [], moves: [], phase: 0, hover: -1, w: 1, h: 1, vp: null, visible: true, raf: 0,
-      reduced: !!opts.reducedMotion, t0: performance.now(), ribbonVerts: 0, lineVerts: 0, fitPts: [], yaw: 0,
+      reduced: !!opts.reducedMotion, t0: performance.now(), ribbonVerts: 0, lineVerts: 0, fitPts: [],
     };
 
     function setData(d) {
       // d = { donors: [{ key, name, sub, cap, used }], receivers: [{ key, name, sub, need, got }], moves: [{ from, to, amount, cross }] }
       const max = Math.max(1, ...d.donors.map((x) => x.cap), ...d.receivers.map((x) => x.need));
-      const H = (v) => v / max * 3.0;
+      const H = (v) => v / max * 4.2;
       const bars = [], idx = new Map();
       const place = (list, side) => list.forEach((x, i) => {
         const z = (i - (list.length - 1) / 2) * ZS, b = { ...x, side, x: side * XS, z, i: bars.length };
@@ -151,7 +151,7 @@
         const yb = (inAt.get(b.i) || 0) + H(m.amount) / 2; inAt.set(b.i, (inAt.get(b.i) || 0) + H(m.amount));
         const p0 = [a.x + W / 2, ya, a.z], p2 = [b.x - W / 2, yb, b.z];
         const span = Math.hypot(p2[0] - p0[0], p2[2] - p0[2]);
-        const c = [(p0[0] + p2[0]) / 2, Math.max(ya, yb) + 1.0 + span * 0.18, (p0[2] + p2[2]) / 2];
+        const c = [(p0[0] + p2[0]) / 2, Math.max(ya, yb) + 0.5 + span * 0.07, (p0[2] + p2[2]) / 2];
         return { ...m, a: a.i, b: b.i, p0, c, p2, width: Math.max(0.05, H(m.amount)), n: Math.round(3 + 9 * m.amount / maxAmt) };
       }).filter(Boolean);
 
@@ -188,8 +188,11 @@
 
       const fit = [];
       for (const b of bars) for (const dz of [-W / 2, W / 2]) fit.push([b.x - W / 2, 0, b.z + dz], [b.x + W / 2, b.full, b.z + dz]);
-      for (const m of st.moves) { const a = bez(m.p0, m.c, m.p2, 0.5); fit.push([a[0], a[1] + m.width / 2 + 0.1, a[2]]); }
-      fit.push([-XS, 0, (d.donors.length / 2) * ZS + 0.8], [XS, 0, (d.receivers.length / 2) * ZS + 0.8]);
+      // every ribbon edge, not a loose box: the camera zooms until the drawn content touches the frame
+      for (const m of st.moves) for (let k = 0; k <= 10; k++) { const a = bez(m.p0, m.c, m.p2, k / 10); fit.push([a[0], a[1] + m.width / 2, a[2]], [a[0], a[1] - m.width / 2, a[2]]); }
+      // label anchors too, so the labels (whose pixel width is reserved beside them) stay inside the frame
+      for (const b of bars) fit.push([b.x + b.side * (W / 2 + 0.5), 0, b.z]);
+      st.fitHead = [[-XS, 0, (d.donors.length / 2) * ZS + 0.8], [XS, 0, (d.receivers.length / 2) * ZS + 0.8]];
       st.fitPts = fit;
       buildLabels(d);
       updateBars();
@@ -232,7 +235,7 @@
       const head = (txt, side, n, cls) => {
         if (!n) return;
         const el = document.createElement('span'); el.className = 'fw-head ' + cls; el.textContent = txt;
-        labelLayer.appendChild(el); labels.push({ el, p: [side * XS, 0, (n / 2) * ZS + 0.8], align: 'center' });
+        labelLayer.appendChild(el); labels.push({ el, p: [side * XS, 0, (n / 2) * ZS], align: 'center', head: true });
       };
       head('可釋出餘額', -1, d.donors.length, 'l'); head('預計超支缺口', 1, d.receivers.length, 'r');
       measure();
@@ -247,7 +250,7 @@
 
     function camera() {
       const aspect = st.w / st.h, fov = 30 * Math.PI / 180, narrow = aspect < 1.1;
-      const phi = narrow ? 0.8 : 0.5, theta = st.yaw;
+      const phi = narrow ? 0.8 : 0.5, theta = 0;
       const target = [0, 0.8, 0], dist = 30;
       const eye = [dist * Math.cos(phi) * Math.sin(theta), target[1] + dist * Math.sin(phi), dist * Math.cos(phi) * Math.cos(theta)];
       const vp0 = M4.mul(M4.persp(fov, aspect, 0.5, 300), M4.lookAt(eye, target, [0, 1, 0]));
@@ -257,11 +260,12 @@
         x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
       }
       if (!Number.isFinite(x0)) { x0 = y0 = -1; x1 = y1 = 1; }
-      // leave room for the HTML labels on both sides and the column headings at the top
-      const R = { x0: -1 + 2 * ((st.labelL || 0) + 14) / st.w, x1: 1 - 2 * ((st.labelR || 0) + 14) / st.w, y0: -1 + 2 * 30 / st.h, y1: 0.95 };
+      // the frame: side margins only as wide as the HTML labels, a strip at the bottom for the column headings.
+      // Fit uniformly, then stretch into the free direction so the content fills the box.
+      const R = { x0: -1 + 2 * ((st.labelL || 0) + 10) / st.w, x1: 1 - 2 * ((st.labelR || 0) + 10) / st.w, y0: -1 + 2 * 38 / st.h, y1: 1 - 2 * 6 / st.h };
       if (R.x1 - R.x0 < 0.4) { R.x0 = -0.2; R.x1 = 0.2; }
       const xr = (R.x1 - R.x0) / (x1 - x0), yr = (R.y1 - R.y0) / (y1 - y0), k = Math.min(xr, yr);
-      const kx = Math.min(xr, k * 1.35), ky = Math.min(yr, k * 1.35);
+      const kx = Math.min(xr, k * 1.8), ky = Math.min(yr, k * 2.2);
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, tx = (R.x0 + R.x1) / 2, ty = (R.y0 + R.y1) / 2;
       st.vp = M4.mul([kx, 0, 0, 0, 0, ky, 0, 0, 0, 0, 1, 0, tx - kx * cx, ty - ky * cy, 0, 1], vp0);
       st.scale = Math.min(kx, ky) * st.h * 1.6;
@@ -328,7 +332,8 @@
       gl.depthMask(true); gl.bindVertexArray(null);
 
       for (const l of labels) {
-        const [x, y, w] = project(l.p);
+        let [x, y, w] = project(l.p);
+        if (l.head) y = st.h - 14;
         const vis = w > 0 && x > -200 && x < st.w + 200;
         l.el.style.opacity = vis ? '1' : '0';
         const dx = l.align === 'right' ? '-100%' : l.align === 'center' ? '-50%' : '0';
@@ -336,13 +341,11 @@
       }
     }
 
-    let lastT = 0, spin = null;
     function frame(now) {
       st.raf = 0;
-      if (spin) spin(Math.min(64, now - (lastT || now))); lastT = now;
       draw(now);
       // keep running while particles move; otherwise only redraw on demand
-      const live = (!st.reduced && st.phase > 0.02 && st.moves.length) || st.dragging || Math.abs(st.vel) > 2e-5;
+      const live = !st.reduced && st.phase > 0.02 && st.moves.length;
       if (live && st.visible && !document.hidden) st.raf = requestAnimationFrame(frame);
     }
     const start = () => { if (!st.raf) st.raf = requestAnimationFrame(frame); };
@@ -362,17 +365,15 @@
     }
     canvas.addEventListener('pointermove', (e) => {
       const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-      const k = st.dragging ? -1 : pick(px, py);
+      const k = pick(px, py);
       if (k !== st.hover) { st.hover = k; updateBars(); start(); }
       if (opts.onHover) opts.onHover(k >= 0 ? st.bars[k] : null, px, py);
     });
     canvas.addEventListener('pointerleave', () => { st.hover = -1; updateBars(); if (opts.onHover) opts.onHover(null); start(); });
     canvas.addEventListener('click', (e) => {          // tap = hover on touch screens
-      if (st.dragged) { st.dragged = false; return; }
       const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, k = pick(px, py);
       st.hover = k; updateBars(); start(); if (opts.onHover) opts.onHover(k >= 0 ? st.bars[k] : null, px, py);
     });
-    spin = orbit(canvas, st, start, 1.0);
 
     new ResizeObserver(() => { resize(); measure(); start(); }).observe(canvas);
     new IntersectionObserver((es) => { st.visible = es[0].isIntersecting; if (st.visible) start(); }).observe(canvas);

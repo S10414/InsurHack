@@ -27,7 +27,7 @@ Every table has CSV and Excel export. Excel upload reads the first sheet as budg
 ### Front-end stack
 - `docs/js/field.js` — WebGL2 "budget field" in the hero: one bar per department x month (actual, or translucent hatched
   forecast), a plate at that month's budget, coloured by spend vs budget. Hover for numbers, click to open that
-  department's projects. Drag or swipe sideways to turn it (arrow keys too; double-click resets). Hand-written shaders, no 3D library.
+  department's projects. Hand-written shaders, no 3D library.
 - `docs/js/flow.js` — WebGL2 reallocation flow: surplus lines on the left, overrun lines on the right, one ribbon per
   transfer whose thickness equals the amount on the bars' scale; the overrun bars fill with teal as transfers arrive, so
   the coral left over is the gap that still needs extra budget.

@@ -7,6 +7,8 @@
 
   // ------------------------------------------------------------------ formatting
   const M = (x, d = 1) => (Number.isFinite(x) ? (x / 1e6).toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d }) : '–');
+  /** Amount with the unit that fits its size (元 / 萬元 / 億元 / 兆元). */
+  const A = (x) => { if (!Number.isFinite(x)) return '–'; const g = unitOf(Math.abs(x)); return (x < 0 ? '−' : '') + g.v.toLocaleString('zh-TW', { minimumFractionDigits: g.d, maximumFractionDigits: g.d }) + ' ' + g.u; };
   const SM = (x, d = 1) => (Number.isFinite(x) ? (x > 0 ? '+' : '') + M(x, d) : '–');
   const Pc = (x, d = 0) => (Number.isFinite(x) ? (x * 100).toFixed(d) + '%' : '–');
   const pill = (r) => `<span class="pill ${F.riskClass(r)}">${esc(r)}</span>`;
@@ -380,24 +382,23 @@
     const after = F.applyMoves(S.res.series, ra.moves).filter((x) => Math.abs(x.after - x.before) > 1);
     const sm = ra.summary;
     return `
-      <div class="note">邏輯：預計用不完的項目，扣掉安全邊際後的餘額可以釋出；預計超支的項目依缺口大小優先補足。順序是同部門其他專案的同一科目、其他部門的同一科目，最後才是跨科目（會標示提醒）。這是建議，不是決策。</div>
       <div class="row">
         <label>釋出餘額的保守程度 <select data-ui="realloc.safety">${opt(1, '保守：以 80% 區間上限估算支出', u.safety)}${opt(0.5, '中性：區間上限與預測值的中間', u.safety)}${opt(0, '積極：以預測值估算支出', u.safety)}</select></label>
-        <label>單筆最低金額 <input type="number" step="0.5" min="0" value="${u.minAmount / 1e6}" data-ruiset="minAmount" data-scale="1000000">百萬元</label>
+        <label>單筆最低金額 <input type="number" step="10" min="0" value="${u.minAmount / 1e4}" data-ruiset="minAmount" data-scale="10000">萬元</label>
         <label><input type="checkbox" ${u.cross ? 'checked' : ''} data-ruicheck="cross"> 允許跨費用科目</label>
         <button class="btn" data-export="realloc">匯出 CSV</button><button class="btn" data-export="realloc" data-fmt="xlsx">匯出 Excel</button></div>
       <div class="kpis">
-        <div class="kpi"><div class="l">預計超支缺口（機率 ≥ 50%）</div><div class="v">${M(sm.totalNeed)}</div><div class="n">${ra.receivers.length} 個項目（百萬元）</div></div>
-        <div class="kpi"><div class="l">可釋出餘額</div><div class="v">${M(sm.totalCapacity)}</div><div class="n">${ra.donors.length} 個項目（百萬元）</div></div>
-        <div class="kpi"><div class="l">建議調配金額</div><div class="v">${M(sm.used)}</div><div class="n">${ra.moves.length} 筆</div></div>
-        <div class="kpi"><div class="l">缺口補足比例</div><div class="v">${sm.totalNeed ? Pc(sm.covered / sm.totalNeed, sm.totalNeed - sm.covered > 1 ? 1 : 0) : '–'}</div><div class="n">${sm.totalNeed - sm.covered > 1 ? '未補足 ' + M(sm.totalNeed - sm.covered) + ' 百萬元，需追加預算' : '全數可由內部調配'}</div></div>
+        <div class="kpi"><div class="l">預計超支缺口（機率 ≥ 50%）</div><div class="v">${A(sm.totalNeed)}</div><div class="n">${ra.receivers.length} 個項目</div></div>
+        <div class="kpi"><div class="l">可釋出餘額</div><div class="v">${A(sm.totalCapacity)}</div><div class="n">${ra.donors.length} 個項目</div></div>
+        <div class="kpi"><div class="l">建議調配金額</div><div class="v">${A(sm.used)}</div><div class="n">${ra.moves.length} 筆</div></div>
+        <div class="kpi"><div class="l">缺口補足比例</div><div class="v">${sm.totalNeed ? Pc(sm.covered / sm.totalNeed, sm.totalNeed - sm.covered > 1 ? 1 : 0) : '–'}</div><div class="n">${sm.totalNeed - sm.covered > 1 ? '未補足 ' + A(sm.totalNeed - sm.covered) + '，需追加預算' : '全數可由內部調配'}</div></div>
       </div>
       ${ra.moves.length || ra.receivers.length ? '<div id="flow-slot"></div>' : ''}
       <h2>調配建議</h2>
-      <div class="card tw">${ra.moves.length ? `<table><thead><tr><th class="l">自（部門・專案・科目）</th><th class="l">至（部門・專案・科目）</th><th class="l">類型</th><th>金額（百萬元）</th><th class="l">提醒</th></tr></thead><tbody>
-        ${ra.moves.map((x) => `<tr><td class="l">${esc(x.from)}</td><td class="l">${esc(x.to)}</td><td class="l nw">${moveType(x)}</td><td class="hl">${M(x.amount)}</td><td class="l small nw">${x.notes.map(esc).join('；') || '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">目前沒有需要或可以調配的項目</div>'}</div>
+      <div class="card tw">${ra.moves.length ? `<table><thead><tr><th class="l">自（部門・專案・科目）</th><th class="l">至（部門・專案・科目）</th><th class="l">類型</th><th>金額</th><th class="l">提醒</th></tr></thead><tbody>
+        ${ra.moves.map((x) => `<tr><td class="l">${esc(x.from)}</td><td class="l">${esc(x.to)}</td><td class="l nw">${moveType(x)}</td><td class="hl">${A(x.amount)}</td><td class="l small nw">${x.notes.map(esc).join('；') || '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">目前沒有需要或可以調配的項目</div>'}</div>
       ${after.length ? `<h2>調配後的預測執行率</h2><div class="card tw"><table><thead><tr><th class="l">部門・專案・科目</th><th>調整前預算</th><th>調整後預算</th><th>預測全年</th><th>調整前 預測÷預算</th><th>調整後 預測÷預算</th></tr></thead><tbody>
-        ${after.map((x) => `<tr><td class="l">${esc(x.name)}</td><td>${M(x.before)}</td><td>${M(x.after)}</td><td>${M(x.forecast)}</td><td>${Pc(x.rateBefore, 1)}</td><td class="hl">${Pc(x.rateAfter, 1)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        ${after.map((x) => `<tr><td class="l">${esc(x.name)}</td><td>${A(x.before)}</td><td>${A(x.after)}</td><td>${A(x.forecast)}</td><td>${Pc(x.rateBefore, 1)}</td><td class="hl">${Pc(x.rateAfter, 1)}</td></tr>`).join('')}</tbody></table></div>` : ''}
       <p class="small">提醒欄位會標示來源項目的承諾支出、歷史上長期未用完，或今年執行落後但可能是專案延後的情況，後者不建議立即釋出。</p>`;
   }
 
@@ -741,8 +742,8 @@
       onHover(b, x, y) {
         if (!b) { tip.hidden = true; return; }
         tip.innerHTML = b.side < 0
-          ? `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>可釋出 ${M(b.cap)}　本次調出 <span class="neg">${M(b.used)}</span> 百萬元`
-          : `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>缺口 ${M(b.need)}　調入 <span class="neg">${M(b.got)}</span> 百萬元${b.need - b.got > 1 ? `<br><span class="pos">仍不足 ${M(b.need - b.got)} 百萬元</span>` : ''}`;
+          ? `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>可釋出 ${A(b.cap)}　本次調出 <span class="neg">${A(b.used)}</span>`
+          : `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>缺口 ${A(b.need)}　調入 <span class="neg">${A(b.got)}</span>${b.need - b.got > 1 ? `<br><span class="pos">仍不足 ${A(b.need - b.got)}</span>` : ''}`;
         tip.hidden = false;
         tip.style.transform = `translate(${Math.min(x + 14, canvas.clientWidth - 230)}px, ${Math.max(y - 80, 4)}px)`;
       },

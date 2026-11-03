@@ -505,6 +505,11 @@
    * department, then (flagged) another category.
    * `hist` must be history(P, 'series').
    */
+  function fmtAmt(x) {
+    const t = [[1e12, '兆元'], [1e8, '億元'], [1e4, '萬元'], [1, '元']], [div, u] = t.find((q) => x >= q[0]) || t[3];
+    const v = x / div, d = u === '元' ? 0 : v >= 100 ? 0 : v >= 10 ? 1 : 2;
+    return Number(v.toFixed(d)).toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' ' + u;
+  }
   function reallocate(result, hist, o = {}) {
     const safety = o.safety ?? 1, minAmt = o.minAmount ?? 1e6, allowCross = o.allowCross !== false;
     const hmap = new Map(hist.map((h) => [lineKey(h), h]));
@@ -525,7 +530,7 @@
       if (amt < minAmt * 0.5) return;
       r.left -= amt; d.left -= amt;
       const notes = [];
-      if (d.s.commitRemaining > 0) notes.push(`來源含承諾支出 ${(d.s.commitRemaining / 1e6).toFixed(1)} 百萬元（已納入預測）`);
+      if (d.s.commitRemaining > 0) notes.push(`來源含承諾支出 ${fmtAmt(d.s.commitRemaining)}（已納入預測）`);
       if (d.tags.includes('長期未用完')) notes.push('歷史上長期未用完，適合同時檢討明年預算');
       if (d.s.paceIndex < 0.8 && !d.tags.includes('長期未用完')) notes.push('今年執行落後，需確認不是專案延後而於年底補執行');
       if (cross) notes.push('跨費用科目調配，需確認是否符合預算管理規範');

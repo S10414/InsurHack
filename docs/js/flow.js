@@ -228,7 +228,7 @@
       labelLayer.innerHTML = ''; labels = [];
       for (const b of st.bars) {
         const el = document.createElement('span'); el.className = 'fw-bar ' + (b.side < 0 ? 'l' : 'r');
-        el.innerHTML = `<b></b><i></i>`; el.firstChild.textContent = b.name; el.lastChild.textContent = b.sub;
+        el.innerHTML = `<b></b>`; el.firstChild.textContent = b.name;
         labelLayer.appendChild(el);
         labels.push({ el, p: [b.x + b.side * (W / 2 + 0.5), 0, b.z], align: b.side < 0 ? 'right' : 'left', bar: b.i });
       }

@@ -9,7 +9,7 @@ year-end outcome and warns about likely overruns or under-execution.
 ## Live tool (GitHub Pages)
 
 <https://s10414.github.io/InsurHack/> — a static, no-backend budget analysis tool. Load the sample data or upload your own
-CSVs (budget + actual per department x project x category x month — the project column is optional — plus optional signed
+CSV or Excel (.xlsx) files (budget + actual per department x project x category x month — the project column is optional — plus optional signed
 commitments). Everything is computed in the browser.
 
 | Tab | What it does |
@@ -20,7 +20,9 @@ commitments). Everything is computed in the browser.
 | Alerts | adjustable rules (probability, % and amount materiality), CSV export |
 | History | multi-year execution rates per department, project and category, behaviour tags (chronic overrun / underspend / Q4 rush), seasonality chart |
 | Reallocation | suggested transfers from safe-surplus lines to likely-overrun lines (same department's other projects first, then other departments, then other categories), with caveats |
-| Data | sample / upload / templates / data-quality warnings |
+| Data | sample / upload CSV or Excel / templates / one-click full Excel report / data-quality warnings |
+
+Every table has CSV and Excel export. Excel upload reads the first sheet as budget/actual and a sheet whose name contains 承諾 (or "commit") as commitments, so an exported report can be loaded back. Excel I/O uses SheetJS community 0.18.5 (Apache-2.0, vendored).
 
 ### Front-end stack
 - `docs/js/field.js` — WebGL2 "budget field" in the hero: one bar per department x month (actual, or translucent hatched

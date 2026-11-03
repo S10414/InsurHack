@@ -66,10 +66,24 @@
     const on = cur && cur.key === key ? (cur.dir > 0 ? ' ▲' : ' ▼') : '';
     return `<th class="s ${left ? 'l' : ''}" data-sort="${tableId}:${key}">${label}${on}</th>`;
   }
-  const download = (name, text) => {
+  let exportFmt = 'csv';
+  const save = (name, blob) => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+    a.href = URL.createObjectURL(blob);
     a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  };
+  const toAOA = (csv) => DATA.parseCSV(csv).map((r) => r.map((c) => (c !== '' && /^-?\d+(\.\d+)?$/.test(c) && !/^0\d/.test(c) ? Number(c) : c)));
+  const sheetOf = (csv) => {
+    const aoa = toAOA(csv), ws = XLSX.utils.aoa_to_sheet(aoa);
+    const w = aoa[0].map((_, i) => Math.min(40, Math.max(8, ...aoa.slice(0, 200).map((r) => String(r[i] == null ? '' : r[i]).length * 1.6 + 2))));
+    ws['!cols'] = w.map((x) => ({ wch: x })); ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    return ws;
+  };
+  const download = (name, text) => {
+    if (exportFmt === 'xlsx' && window.XLSX) {
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, sheetOf(text), name.replace(/\.csv$/, '').slice(0, 31).replace(/[\\/?*\[\]:]/g, '_'));
+      save(name.replace(/\.csv$/, '.xlsx'), new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    } else save(name, new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
   };
   const toCSV = (cols, rows) => [cols.map((c) => c[0]).join(',')].concat(rows.map((r) => cols.map((c) => {
     const v = c[1](r); return /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
@@ -187,7 +201,7 @@
       <div class="row"><div class="chips">${[['all', '全部'], ['red', '紅燈'], ['amber', '黃燈'], ['green', '綠燈']].map(([k, l]) => `<button class="chip ${u.risk === k ? 'on' : ''}" data-chip="overview.risk:${k}">${l}</button>`).join('')}</div>
         ${u.dept ? `<button class="btn" data-drill="${f.proj != null && hasProj(u.dept) ? scopeKey(u.dept, null) : ''}">回上一層</button>` : ''}
         <button class="btn" data-fc-scope>看${esc(name)}的年底預測</button>
-        <button class="btn" data-export="overview">匯出 CSV</button></div>
+        <button class="btn" data-export="overview">匯出 CSV</button><button class="btn" data-export="overview" data-fmt="xlsx">匯出 Excel</button></div>
       <div class="card tw"><table><thead><tr>
         ${th('overview', 'name', unit, u.sort, true)}${th('overview', 'fyBudget', '全年預算', u.sort)}${th('overview', 'ytdActual', '年累計實際', u.sort)}
         ${th('overview', 'utilization', '執行率 / 同期進度', u.sort)}${th('overview', 'fyForecast', '預測全年', u.sort)}${th('overview', 'rate', '預測÷預算', u.sort)}
@@ -217,7 +231,7 @@
         <label>層級 <select data-ui="variance.level">${opt('dept', '部門', u.level)}${withProj ? opt('proj', '專案', u.level) : ''}${opt('cat', '費用科目', u.level)}${opt('dept_cat', '部門×科目', u.level)}${withProj ? opt('series', '專案×科目', u.level) : ''}</select></label>
         ${scopeSelects('variance', u)}
         <label>重大差異門檻 ≥ <input type="number" step="1" min="0" value="${S.settings.materialPct * 100}" data-set="materialPct" data-scale="0.01">% 且 ≥ <input type="number" step="0.5" min="0" value="${S.settings.materialAmount / 1e6}" data-set="materialAmount" data-scale="1000000">百萬元</label>
-        <button class="btn" data-export="variance">匯出 CSV</button>
+        <button class="btn" data-export="variance">匯出 CSV</button><button class="btn" data-export="variance" data-fmt="xlsx">匯出 Excel</button>
       </div>
       <div class="grid2">
         <div class="card"><h3>預算 → 實際：差異來源（${wl}）</h3><div id="ch-wf"></div></div>
@@ -257,7 +271,7 @@
     const sel = `<div class="row">
         ${scopeSelects('forecast', u)}
         <label>費用科目 <select data-ui="forecast.cat">${opt('', '全部科目', u.cat)}${scopeCats.map((c) => opt(c, c, u.cat)).join('')}</select></label>
-        <button class="btn" data-export="forecast">匯出 CSV</button></div>`;
+        <button class="btn" data-export="forecast">匯出 CSV</button><button class="btn" data-export="forecast" data-fmt="xlsx">匯出 Excel</button></div>`;
     if (!members.length) return sel + '<div class="empty">沒有符合的資料</div>';
     const g = F.aggregate(members, 'total', S.settings.risk)[0];
     const path = F.groupPath(members, m); S._chartPath = path;
@@ -323,7 +337,7 @@
         </div>
         <p class="small" style="margin:0">金額門檻避免小科目因百分比波動而亮紅燈。機率來自預測區間；單月異常與季節性落後另列為提示。</p></div>
       <div class="row" style="margin-top:14px"><div class="chips">${[['all', '全部'], ['紅燈', '紅燈'], ['黃燈', '黃燈'], ['提示', '提示']].map(([k, l]) => `<button class="chip ${u.level === k ? 'on' : ''}" data-chip="alerts.level:${k}">${l}（${S.alerts.filter((a) => k === 'all' || a.level === k).length}）</button>`).join('')}</div>
-        <button class="btn" data-export="alerts">匯出 CSV</button></div>
+        <button class="btn" data-export="alerts">匯出 CSV</button><button class="btn" data-export="alerts" data-fmt="xlsx">匯出 Excel</button></div>
       ${list.map((a) => `<div class="alert ${a.level === '紅燈' ? 'red' : a.level === '黃燈' ? 'amber' : 'info'}"><div class="t"><span class="pill ${a.level === '紅燈' ? 'red' : a.level === '黃燈' ? 'amber' : 'info'}">${a.level}</span>${esc(a.title)}：${esc(a.type.replace(/^[紅黃]燈・/, ''))}</div>
         <div class="x">${esc(a.text)}</div><div class="a"><b>建議：</b>${esc(a.action)}</div></div>`).join('') || '<div class="empty">沒有符合的預警</div>'}`;
   }
@@ -371,7 +385,7 @@
         <label>釋出餘額的保守程度 <select data-ui="realloc.safety">${opt(1, '保守：以 80% 區間上限估算支出', u.safety)}${opt(0.5, '中性：區間上限與預測值的中間', u.safety)}${opt(0, '積極：以預測值估算支出', u.safety)}</select></label>
         <label>單筆最低金額 <input type="number" step="0.5" min="0" value="${u.minAmount / 1e6}" data-ruiset="minAmount" data-scale="1000000">百萬元</label>
         <label><input type="checkbox" ${u.cross ? 'checked' : ''} data-ruicheck="cross"> 允許跨費用科目</label>
-        <button class="btn" data-export="realloc">匯出 CSV</button></div>
+        <button class="btn" data-export="realloc">匯出 CSV</button><button class="btn" data-export="realloc" data-fmt="xlsx">匯出 Excel</button></div>
       <div class="kpis">
         <div class="kpi"><div class="l">預計超支缺口（機率 ≥ 50%）</div><div class="v">${M(sm.totalNeed)}</div><div class="n">${ra.receivers.length} 個項目（百萬元）</div></div>
         <div class="kpi"><div class="l">可釋出餘額</div><div class="v">${M(sm.totalCapacity)}</div><div class="n">${ra.donors.length} 個項目（百萬元）</div></div>
@@ -392,14 +406,15 @@
       <div class="grid2e">
         <div class="card"><h3>使用範例資料</h3><p class="small">模擬一家壽險公司 10 個部門、24 個專案、8 類費用，2023–2026 年。六種典型情境埋在特定專案裡，例如核心系統換版延後、品牌廣告年底集中消化、委外理賠調查費用暴增。</p>
           <button class="btn pri" data-load-sample>載入範例資料</button></div>
-        <div class="card"><h3>上傳你的資料（CSV）</h3>
-          <div class="row"><label>預算與實際 <input type="file" accept=".csv,text/csv" data-upload="budget"></label></div>
-          <div class="row"><label>承諾支出（選填） <input type="file" accept=".csv,text/csv" data-upload="comm"></label></div>
-          <div class="row"><button class="btn" data-template="budget">下載預算檔範本</button><button class="btn" data-template="comm">下載承諾支出範本</button></div>
+        <div class="card"><h3>上傳你的資料（CSV 或 Excel）</h3>
+          <div class="row"><label>預算與實際 <input type="file" accept=".csv,.xlsx,.xls,text/csv" data-upload="budget"></label></div>
+          <div class="row"><label>承諾支出（選填） <input type="file" accept=".csv,.xlsx,.xls,text/csv" data-upload="comm"></label></div>
+          <div class="row"><button class="btn" data-template="budget">下載預算檔範本</button><button class="btn" data-template="comm">下載承諾支出範本</button><button class="btn" data-template="xlsx">下載 Excel 範本</button></div>
+          <p class="small">Excel 檔讀取第一個工作表；若另有名稱含「承諾」的工作表，會一併讀入承諾支出。</p>
           <p class="small">欄位：年度、月份、部門、專案（選填）、費用科目、預算、實際（尚未結帳的月份實際留白）。有專案欄位時，總覽可以從部門往下看到各專案。建議至少 3 年資料，最新年度為進行中。資料只在你的瀏覽器內處理。</p></div>
       </div>
       ${S.issues.map((i) => `<div class="warn">${esc(i)}</div>`).join('')}
-      ${info && S.rows.length ? `<h2>目前資料</h2><div class="kpis">
+      ${info && S.rows.length ? `<h2>目前資料</h2><div class="row"><button class="btn pri" data-export="workbook">匯出完整分析 Excel</button><span class="small">一個檔案含部門、專案、科目預測、預警、調配建議與原始資料</span></div><div class="kpis">
         <div class="kpi"><div class="l">來源</div><div class="v" style="font-size:16px">${esc(S.source)}</div></div>
         <div class="kpi"><div class="l">年度</div><div class="v" style="font-size:16px">${info.years[0]}–${info.years[info.years.length - 1]}</div><div class="n">${info.years.length} 年</div></div>
         <div class="kpi"><div class="l">部門 / 專案 / 科目</div><div class="v" style="font-size:16px">${info.depts.length} / ${info.projs.length || '–'} / ${info.cats.length}</div></div>
@@ -476,8 +491,10 @@
       render();
     }
     else if (d.histGo !== undefined) { const sc = parseScope(d.histGo), u = S.ui.history; u.dept = sc.dept; u.proj = sc.dept ? sc.proj : null; render(); }
-    else if (d.export) exportCSV(d.export);
+    else if (d.export === 'workbook') exportWorkbook();
+    else if (d.export) { exportFmt = d.fmt === 'xlsx' ? 'xlsx' : 'csv'; try { exportCSV(d.export); } finally { exportFmt = 'csv'; } }
     else if (d.loadSample !== undefined) loadSample();
+    else if (d.template === 'xlsx') exportTemplateXlsx();
     else if (d.template) download(d.template === 'budget' ? '預算檔範本.csv' : '承諾支出範本.csv', d.template === 'budget' ? DATA.TEMPLATE : DATA.COMMIT_TEMPLATE);
     else if (d.whatifReset !== undefined) { S.ui.forecast.factor = null; render(); }
     else if (d.riskReset !== undefined) { S.settings.risk = JSON.parse(JSON.stringify(F.DEFAULT_SETTINGS.risk)); recompute(); render(); }
@@ -526,14 +543,24 @@
 
   function readFile(file, kind) {
     if (!file) return;
-    const rd = new FileReader();
+    const isXlsx = /\.xlsx?$/i.test(file.name), rd = new FileReader();
     rd.onload = () => {
-      const text = String(rd.result);
+      let text, commText = null;
+      if (isXlsx) {
+        try {
+          const wb = XLSX.read(rd.result, { type: 'array' });
+          const csv = (n) => XLSX.utils.sheet_to_csv(wb.Sheets[n], { FS: ',', rawNumbers: true });
+          const cn = wb.SheetNames.find((n, i) => i > 0 && /承諾|commit/i.test(n));
+          const main = kind === 'budget' ? wb.SheetNames.find((n) => !/承諾|commit/i.test(n)) || wb.SheetNames[0] : (cn || wb.SheetNames[0]);
+          text = csv(main); if (kind === 'budget' && cn) commText = csv(cn);
+        } catch (err) { S.issues = ['無法讀取 Excel 檔：' + err.message]; render(); return; }
+      } else text = String(rd.result);
       if (kind === 'budget') {
         const r = DATA.parseBudget(text);
         if (!r.rows.length) { S.issues = r.issues; render(); return; }
-        setData(r.rows, S.comm.filter(() => false), file.name);
-        S.issues = r.issues.concat(S.issues);
+        const c = commText ? DATA.parseCommitments(commText) : { rows: [], issues: [] };
+        setData(r.rows, c.rows, file.name);
+        S.issues = r.issues.concat(c.issues, S.issues);
         renderHero(true);
       } else {
         const r = DATA.parseCommitments(text);
@@ -542,7 +569,30 @@
       }
       render();
     };
-    rd.readAsText(file, 'utf-8');
+    if (isXlsx) rd.readAsArrayBuffer(file); else rd.readAsText(file, 'utf-8');
+  }
+
+  function exportTemplateXlsx() {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheetOf(DATA.TEMPLATE), '預算與實際');
+    XLSX.utils.book_append_sheet(wb, sheetOf(DATA.COMMIT_TEMPLATE), '承諾支出');
+    save('預算檔範本.xlsx', new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  }
+
+  /** One workbook with every result table plus the raw data (same layout as the upload template). */
+  function exportWorkbook() {
+    const risk = S.settings.risk, wb = XLSX.utils.book_new(), R = Math.round;
+    const add = (name, cols, rows) => XLSX.utils.book_append_sheet(wb, sheetOf(toCSV(cols, rows)), name);
+    const fc = [['全年預算', (r) => R(r.fyBudget)], ['年累計實際', (r) => R(r.ytdActual)], ['預測全年', (r) => R(r.fyForecast)], ['預測÷預算', (r) => r.rate.toFixed(4)], ['預計差異', (r) => R(r.gap)], ['區間下限', (r) => R(r.lo)], ['區間上限', (r) => R(r.hi)], ['超支機率', (r) => r.pOver.toFixed(3)], ['燈號', (r) => r.risk]];
+    add('部門預測', [['部門', (r) => r.dept]].concat(fc), F.aggregate(S.res.series, 'dept', risk));
+    if (S.info && S.info.projs.length) add('專案預測', [['部門', (r) => r.dept], ['專案', (r) => r.proj || '']].concat(fc), F.aggregate(S.res.series, 'proj', risk));
+    add('科目預測', [['部門', (r) => r.dept], ['專案', (r) => r.proj || ''], ['費用科目', (r) => r.cat]].concat(fc), S.res.series);
+    add('預警清單', [['等級', (a) => a.level], ['類型', (a) => a.type], ['部門', (a) => a.dept], ['專案', (a) => a.proj || ''], ['費用科目', (a) => a.cat], ['說明', (a) => a.text], ['建議', (a) => a.action]], S.alerts);
+    const u = S.ui.realloc, ra = F.reallocate(S.res, S.hist, { safety: u.safety, minAmount: u.minAmount, allowCross: u.cross });
+    add('預算調配建議', [['來源部門', (x) => x.fromDept], ['來源專案', (x) => x.fromProj || ''], ['來源科目', (x) => x.fromCat], ['目標部門', (x) => x.toDept], ['目標專案', (x) => x.toProj || ''], ['目標科目', (x) => x.toCat], ['金額', (x) => R(x.amount)], ['類型', moveType], ['提醒', (x) => x.notes.join('；')]], ra.moves);
+    add('預算與實際', [['年度', (r) => r.year], ['月份', (r) => r.month], ['部門', (r) => r.dept], ['專案', (r) => r.proj || ''], ['費用科目', (r) => r.cat], ['預算', (r) => r.budget], ['實際', (r) => (r.actual === null ? '' : r.actual)]], S.rows);
+    if (S.comm.length) add('承諾支出', [['年度', (r) => r.year], ['月份', (r) => r.month], ['部門', (r) => r.dept], ['專案', (r) => r.proj || ''], ['費用科目', (r) => r.cat], ['承諾金額', (r) => r.amount]], S.comm);
+    save(`${S.year}預算分析報告.xlsx`, new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   }
 
   function exportCSV(kind) {
@@ -582,13 +632,21 @@
     });
   }
 
+  /** Pick the Chinese unit that keeps the number readable: 元 / 萬元 / 億元 / 兆元, 3 significant digits. */
+  function unitOf(x) {
+    const tiers = [[1e12, '兆元'], [1e8, '億元'], [1e4, '萬元'], [1, '元']];
+    const [div, u] = tiers.find((t) => x >= t[0]) || tiers[3];
+    const v = x / div, d = v >= 100 ? 0 : v >= 10 ? 1 : 2;
+    return { v, d: u === '元' ? 0 : d, u };
+  }
+
   function renderHero(replay) {
     const title = $('#hero-title');
     if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; $('#hero-sub').textContent = ''; return; }
     const t = F.aggregate(S.res.series, 'total', S.settings.risk)[0];
-    const gapM = Math.abs(t.gap) / 1e6;
+    const gu = unitOf(Math.abs(t.gap));
     title.innerHTML =
-      `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <b data-v="${gapM.toFixed(1)}" data-d="1">${gapM.toFixed(1)}</b> 百萬元</span></span>`;
+      `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <b data-v="${gu.v.toFixed(gu.d)}" data-d="${gu.d}">${gu.v.toFixed(gu.d)}</b> ${gu.u}</span></span>`;
     renderHeroSub();
     if (field) field.setData({ rows: heroRows(), closed: S.month });
     if (!heroPlayed) { heroPlayed = true; MO.heroIntro(field); }

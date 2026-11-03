@@ -40,6 +40,7 @@
     const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
     tl.from('.hero-title .ln > span', { yPercent: 105, duration: 0.9, stagger: 0.1 }, 0)
       .add(() => nums.forEach(countUp), 0.15)
+      .from('.hero-sub', { opacity: 0, y: 8, duration: 0.6 }, 0.35)
       .from('.hero-legend li', { opacity: 0, x: -8, duration: 0.5, stagger: 0.06 }, 0.45);
     if (field) tl.to(g, { v: 2, duration: 2.2, ease: 'power2.out', onUpdate: () => field.setGrow(g.v) }, 0.2);
   }

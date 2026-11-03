@@ -584,14 +584,43 @@
 
   function renderHero(replay) {
     const title = $('#hero-title');
-    if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; return; }
+    if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; $('#hero-sub').textContent = ''; return; }
     const t = F.aggregate(S.res.series, 'total', S.settings.risk)[0];
     const gapM = Math.abs(t.gap) / 1e6;
     title.innerHTML =
       `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <b data-v="${gapM.toFixed(1)}" data-d="1">${gapM.toFixed(1)}</b> 百萬元</span></span>`;
+    renderHeroSub();
     if (field) field.setData({ rows: heroRows(), closed: S.month });
     if (!heroPlayed) { heroPlayed = true; MO.heroIntro(field); }
     else if (replay) { MO.refreshHeroNumbers(); MO.regrow(); }
+  }
+
+  /** One line under the headline: departments forecast above budget, and below it. Items are dropped
+   *  (largest deviations kept) until the line fits the width; CSS ellipsis is the last fallback. */
+  function renderHeroSub() {
+    const el = $('#hero-sub');
+    if (!S.res || !el) return;
+    const ds = F.aggregate(S.res.series, 'dept', S.settings.risk);
+    const dev = (d) => d.rate - 1;
+    const over = ds.filter((d) => d.risk.startsWith('紅') || d.risk === '黃燈・小幅超支風險').sort((a, b) => dev(b) - dev(a));
+    const under = ds.filter((d) => d.risk === '黃燈・預計大幅未執行').sort((a, b) => dev(a) - dev(b));
+    const pct = (d) => `${dev(d) > 0 ? '+' : '−'}${(Math.abs(dev(d)) * 100).toFixed(1)}%`;
+    const item = (d) => `${esc(d.dept)} <b>${pct(d)}</b>`;
+    const group = (label, cls, list, n, short) => (list.length ? `<span class="grp ${cls}"><i class="sw ${cls}"></i>${label}：${list.slice(0, n).map(item).join('、')}${list.length > n ? ` 等 ${list.length} 個${short ? '' : '部門'}` : ''}</span>` : '');
+    const draw = (no, nu, short) => {
+      el.innerHTML = (over.length || under.length)
+        ? group(short ? '超支' : '高於預算', 'over', over, no, short) + group(short ? '結餘' : '低於預算', 'under', under, nu, short)
+        : '各部門的全年預測都在預算附近';
+      el.title = (over.length ? '高於預算：' + over.map((d) => `${d.dept} ${pct(d)}`).join('、') : '') +
+        (under.length ? '　低於預算：' + under.map((d) => `${d.dept} ${pct(d)}`).join('、') : '');
+    };
+    const fits = () => el.scrollWidth <= el.clientWidth + 1;
+    let no = over.length, nu = under.length, short = false;
+    draw(no, nu, short);
+    while (!fits() && (no > 1 || nu > 1 || !short)) {
+      if (no > 1 && no >= nu) no--; else if (nu > 1) nu--; else short = true;
+      draw(no, nu, short);
+    }
   }
 
   function initField() {
@@ -620,4 +649,6 @@
   initField();
   loadSample();
   $('#cue').addEventListener('click', () => MO.goTools());
+  let subTimer = 0;
+  window.addEventListener('resize', () => { clearTimeout(subTimer); subTimer = setTimeout(renderHeroSub, 120); });
 })();

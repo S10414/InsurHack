@@ -194,6 +194,15 @@
           st.cells.push({ r, i, x, z, h, bh, row: row.name, ...m });
         });
       });
+      // points the camera must keep in view: every bar top, the floor corners and the HTML labels
+      // (row labels are right-aligned left of the grid, month labels in front of it, "預測" behind it)
+      const zEdge = nR / 2 * SP * 1.08, fit = [];
+      for (const c of st.cells) fit.push([c.x - WIDTH / 2, Math.max(c.h, c.bh), c.z - WIDTH / 2], [c.x + WIDTH / 2, Math.max(c.h, c.bh), c.z + WIDTH / 2]);
+      for (const x of [-6 * SP, 6 * SP]) for (const z of [-zEdge, zEdge]) fit.push([x, 0, z]);
+      for (let r = 0; r < nR; r++) fit.push([-6 * SP - 0.35, 0, (r - (nR - 1) / 2) * SP * 1.08]);   // row-label anchors
+      for (let i = 0; i < 12; i++) fit.push([(i - 5.5) * SP, 0, zEdge + 0.95]);
+      fit.push([-6 * SP + d.closed * SP + 1.1, 0, -zEdge - 0.95]);
+      st.fitPts = fit;
       const up = (s, inst, col) => {
         gl.bindBuffer(gl.ARRAY_BUFFER, s.inst); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inst), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, s.col); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(col), gl.STATIC_DRAW);
@@ -232,6 +241,8 @@
       }
       const el = document.createElement('span'); el.className = 'fl-today'; el.textContent = '預測 →';
       labelLayer.appendChild(el); labels.push({ el, p: [st.extent.tx + 0.15, 0, st.extent.z0 - 0.7], align: 'left' });
+      // row labels are right-aligned at their anchor and have a fixed pixel size: reserve that width
+      st.labelW = Math.max(0, ...labels.filter((l) => l.align === 'right').map((l) => l.el.offsetWidth));
     }
 
     function camera() {
@@ -245,8 +256,11 @@
       const target = [0, 0.5 * (1 - st.tilt), 0];
       const up = st.tilt > 0.97 ? [0, 0, -1] : [0, 1, 0];
       const proj = M4.persp(fov, aspect, 0.5, 300);
-      const corners = [];
-      for (const x of [-hx - 1.6, hx]) for (const z of [-hz, hz]) for (const y of [0, top]) corners.push([x, y, z]);
+      let corners = st.fitPts;
+      if (!corners || !corners.length) {
+        corners = [];
+        for (const x of [-hx - 1.6, hx]) for (const z of [-hz, hz]) for (const y of [0, top]) corners.push([x, y, z]);
+      }
       // fixed distance for a calm perspective, then pan + zoom in clip space (a lens shift) so the
       // whole grid, including the row labels on the left, fills the stage
       const dist = 30;
@@ -259,12 +273,15 @@
         x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
       }
       // target rectangle in clip space: the field has its own box below the headline, beside the legend.
-      // Fit it, then anchor it to the left (next to the legend, aligned with the headline) with room
-      // for the department labels.
-      const R = { x0: -0.90, x1: 0.96, y0: -0.90, y1: 0.90 };
-      const k = Math.min((R.x1 - R.x0) / (x1 - x0), (R.y1 - R.y0) / (y1 - y0)), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-      const tx = R.x0 + k * (x1 - x0) / 2, ty = (R.y0 + R.y1) / 2;
-      const post = [k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx - k * cx, ty - k * cy, 0, 1];
+      // Fit uniformly, then stretch into the free direction (wider on desktop, taller on phones) so the
+      // box is filled instead of leaving empty margins; anchor left, leaving room for the department labels.
+      const STRETCH_X = 1.8, STRETCH_Y = 1.8;
+      const R = { x0: Math.min(-1 + 2 * ((st.labelW || 0) + 8) / st.w, 0), x1: 0.95, y0: -0.95, y1: 0.95 };
+      const xr = (R.x1 - R.x0) / (x1 - x0), yr = (R.y1 - R.y0) / (y1 - y0), k = Math.min(xr, yr);
+      const kx = Math.min(xr, k * STRETCH_X), ky = Math.min(yr, k * STRETCH_Y);
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const tx = R.x0 + kx * (x1 - x0) / 2, ty = (R.y0 + R.y1) / 2;
+      const post = [kx, 0, 0, 0, 0, ky, 0, 0, 0, 0, 1, 0, tx - kx * cx, ty - ky * cy, 0, 1];
       st.eye = eye; st.vp = M4.mul(post, vp0); st.dist = dist;
     }
 

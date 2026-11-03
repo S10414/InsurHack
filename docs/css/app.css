@@ -92,7 +92,14 @@ td.nw{white-space:normal;min-width:280px;max-width:460px}
 .hero select option{color:#15212e}
 .hero-copy{position:relative;z-index:3;width:100%;padding-top:3vh}
 /* one line at every width: the size follows the viewport and the line never wraps */
-.hero-title{font-family:var(--f-display);font-weight:700;font-size:clamp(21px,6.1vw,54px);line-height:1.2;letter-spacing:.01em;margin:0;white-space:nowrap}
+.hero-title{font-family:var(--f-display);font-weight:700;font-size:clamp(19px,4.6vw,40px);line-height:1.2;letter-spacing:.01em;margin:0;white-space:nowrap}
+/* one-line subtitle: which departments are forecast above / below budget */
+.hero-sub{margin:8px 0 0;font-size:clamp(12px,1.25vw,15px);color:var(--hero-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-sub .grp{display:inline-flex;align-items:center;gap:7px}
+.hero-sub .grp + .grp{margin-left:1.6em}
+.hero-sub b{font-weight:600;font-variant-numeric:tabular-nums}
+.hero-sub .over b{color:#ff8a7a}.hero-sub .under b{color:#5fd3b7}
+.hero-sub .sw{width:10px;height:10px}
 .hero-title .ln{display:block;overflow:hidden;padding-bottom:.06em}
 .hero-title .ln > span{display:inline-block}
 .hero-title b{font-family:var(--f-ui);font-weight:600;font-variant-numeric:tabular-nums lining-nums;letter-spacing:-.01em}
@@ -104,7 +111,7 @@ td.nw{white-space:normal;min-width:280px;max-width:460px}
 .sw.fc{background:repeating-linear-gradient(135deg,rgba(128,148,179,.9) 0 2px,rgba(128,148,179,.35) 2px 5px)}
 /* field below the headline, legend in its own column beside the field */
 .hero-stage{position:relative;width:100%;flex:1;min-height:300px;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:minmax(0,1fr);
-  gap:18px;padding-top:2vh;padding-bottom:68px}
+  gap:18px;padding-top:1vh;padding-bottom:60px}
 .field-wrap{position:relative;min-height:260px}
 #field{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
 .field-labels{position:absolute;inset:0;pointer-events:none;z-index:2}
@@ -129,6 +136,7 @@ h2{font-weight:600;letter-spacing:.01em}
   .hero{min-height:560px}
   .hero-stage{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:10px;padding-top:12px}
   .hero-legend{flex-direction:row;flex-wrap:wrap;gap:6px 14px;align-self:start;font-size:11px}
+  .hero-sub{font-size:12px}.hero-sub .grp{gap:5px}.hero-sub .grp + .grp{margin-left:1em}
   .brand-sub{display:none}
   .field-labels span{font-size:10px}
 }

@@ -2,7 +2,7 @@
  * Budget field: WebGL2 view of every department x month.
  *   bar height  = spend that month (actual, or forecast for open months), relative to the department's average monthly budget
  *   thin plate  = that month's budget, at the same scale
- *   colour      = spend vs budget (teal under, slate on budget, coral over); forecast bars are translucent and hatched
+ *   colour      = spend vs budget, three flat colours (coral > +5%, teal < −5%, slate in between); forecast bars are translucent and hatched
  * The camera tilts from an oblique view to a near top-down "heat map" as setTilt(0..1) is driven by scroll.
  */
 (function (root) {
@@ -133,12 +133,11 @@
 
   // ------------------------------------------------------------------ colour scale
   const UNDER = [0.20, 0.72, 0.60], MID = [0.40, 0.48, 0.60], OVER = [0.95, 0.35, 0.29];
+  /** Three flat colours, no gradient: over budget by more than 5% -> coral, under by more than 5% -> teal, else slate. */
+  const BAND = 0.05;
   function colorFor(ratio) {
     if (!Number.isFinite(ratio)) return MID;
-    const t = Math.max(-1, Math.min(1, (ratio - 1) / 0.25));
-    const [a, b, u] = t < 0 ? [MID, UNDER, -t] : [MID, OVER, t];
-    const e = Math.pow(u, 0.8);
-    return a.map((x, i) => x + (b[i] - x) * e);
+    return ratio > 1 + BAND ? OVER : ratio < 1 - BAND ? UNDER : MID;
   }
 
   // ------------------------------------------------------------------ field

@@ -829,8 +829,8 @@
   }
 
   /** Variance columns: one bar per item of the current level (largest |variance| in the selected window first,
-   *  max 12) on a glass floor that is the budget; up = overspend, down = under budget, faded = below the materiality
-   *  threshold. The tooltip adds the same item's year-to-date (or this month's) variance for context. */
+   *  max 12) on a glass floor that is the budget; up = overspend (red), down = under budget (green), one flat colour
+   *  each; material variances are tagged in the label. The tooltip adds the same item's year-to-date (or this month's) variance for context. */
   function varianceScene() {
     const u = S.ui.variance, P = S.res.panel, mp = S.settings.materialPct, ma = S.settings.materialAmount;
     const o = { dept: u.dept || null, proj: u.proj, materialPct: mp, materialAmount: ma };
@@ -855,12 +855,12 @@
     const wl = { month: '當月', qtd: '本季累計', ytd: '年累計' }[u.window];
     items.forEach((v, i) => {
       const x = xOf(i), d = v.variancePct, y = Yd(d);
-      const base = d > 0 ? RGB.over : RGB.under, col = v.material ? base : mixc(base, RGB.mid, 0.45);
+      const col = d > 0 ? RGB.over : RGB.under;          // flat colours like the year-end view: red over, green under
       boxes.push({ x, z: 0, y0: Math.min(0, y), y1: Math.max(0, y) + (Math.abs(y) < 0.02 ? 0.02 : 0), w: W, d: W, color: col, id: i });
       if (Math.abs(d) > cap) boxes.push({ x, z: 0, y0: y - Math.sign(d) * 0.18, y1: y - Math.sign(d) * 0.12, w: W + 0.02, d: W + 0.02, color: [0.06, 0.11, 0.19], id: i });
       const r = ref.get(v.name);
       const top = y;
-      labels.push({ html: `<b class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}</b><i>${A(Math.abs(v.variance))}</i>`,
+      labels.push({ html: `<b class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}</b><i>${A(Math.abs(v.variance))}${v.material ? '・重大差異' : ''}</i>`,
         p: [x, top + (d >= 0 ? 0.25 : -0.25), 0], align: 'center', cls: 'val ' + (d >= 0 ? 'up' : 'down'), id: i, reserve: false });
       labels.push({ text: v.name, p: d >= 0 ? [x, 0, z1 + 0.35] : [x, 0.32, z0], align: 'center', cls: 'name', id: i, reserve: false });
       for (const yy of [y, top + (d >= 0 ? 0.6 : -0.6)]) fit.push([x - W / 2 - 0.17, yy, -W / 2 - 0.17], [x + W / 2 + 0.17, yy, W / 2 + 0.17]);
@@ -873,7 +873,7 @@
     return {
       title: '差異落點', sub: `${wl}各項目實際比預算多或少多少`,
       aria: '各項目實際支出相對預算的超支或節省立體圖',
-      legend: `<li><i class="sw over"></i>超支（重大）</li><li><i class="sw under"></i>低於預算（重大）</li><li><i class="sw mid"></i>未達重大門檻</li><li class="hint">地面 = 預算；高度 = 差異 ÷ 預算，超過 ±${Pc(cap)} 截斷；點長條看該項目的趨勢</li>`,
+      legend: `<li><i class="sw over"></i>超支</li><li><i class="sw under"></i>低於預算</li><li class="hint" style="margin-left:0">「重大差異」= 差異 ≥ ${Pc(mp)} 且 ≥ ${A(ma)}</li><li class="hint">地面 = 預算；高度 = 差異 ÷ 預算，超過 ±${Pc(cap)} 截斷；點長條看該項目的趨勢</li>`,
       sig: ['v3', u.level, u.window, u.dept, u.proj, S.month, mp, ma, items.map((v) => v.name + Math.round(v.variance)).join()].join('|'),
       camera: { phi: 0.24, theta: -0.14, phiNarrow: 0.3, thetaNarrow: -0.08, sx: 1.8, sy: 1.8, syNarrow: 2.6, bottom: 8, top: 8 },
       anim: { from: { grow: 0 }, to: { grow: 1 }, duration: 1.0 },

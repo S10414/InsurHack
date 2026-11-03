@@ -125,11 +125,12 @@
 
     const st = {
       bars: [], moves: [], phase: 0, hover: -1, w: 1, h: 1, vp: null, visible: true, raf: 0,
-      reduced: !!opts.reducedMotion, t0: performance.now(), ribbonVerts: 0, lineVerts: 0, fitPts: [],
+      reduced: !!opts.reducedMotion, t0: performance.now(), ribbonVerts: 0, lineVerts: 0, fitPts: [], zoom: 0, focusPts: null, rel: null,
     };
 
     function setData(d) {
       // d = { donors: [{ key, name, sub, cap, used }], receivers: [{ key, name, sub, need, got }], moves: [{ from, to, amount, cross }] }
+      st.hover = -1; st.zoom = 0; st.focusPts = null;
       const max = Math.max(1, ...d.donors.map((x) => x.cap), ...d.receivers.map((x) => x.need));
       const H = (v) => v / max * 4.2;
       const bars = [], idx = new Map();
@@ -198,6 +199,19 @@
       updateBars();
     }
 
+    /** Points to keep in view when zoomed onto bar i: its bar, the bars it trades with, and the ribbons between. */
+    function focusPoints(i) {
+      const rel = new Set([i]);
+      for (const m of st.moves) if (m.a === i || m.b === i) { rel.add(m.a); rel.add(m.b); }
+      const pts = [];
+      for (const b of st.bars) if (rel.has(b.i)) {
+        for (const dz of [-W / 2, W / 2]) pts.push([b.x - W / 2, 0, b.z + dz], [b.x + W / 2, b.full, b.z + dz]);
+        pts.push([b.x + b.side * (W / 2 + 0.5) + b.side * 1.2, 0, b.z]);     // room for its label
+      }
+      for (const m of st.moves) if (m.a === i || m.b === i) for (let k = 0; k <= 8; k++) { const p = bez(m.p0, m.c, m.p2, k / 8); pts.push([p[0], p[1] + m.width / 2, p[2]], [p[0], p[1] - m.width / 2, p[2]]); }
+      return pts;
+    }
+
     function updateBars() {
       const I = [], C = [];
       const ph = st.phase;
@@ -219,6 +233,7 @@
       st.ghostN = I.length / 4 - st.solidN;
       gl.bindBuffer(gl.ARRAY_BUFFER, binst); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(I), gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, bcol); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(C), gl.DYNAMIC_DRAW);
+      st.rel = rel;
       labels.forEach((l) => { if (l.bar !== undefined) l.el.classList.toggle('dim', st.hover >= 0 && !rel.has(l.bar)); });
     }
 
@@ -254,20 +269,35 @@
       const target = [0, 0.8, 0], dist = 30;
       const eye = [dist * Math.cos(phi) * Math.sin(theta), target[1] + dist * Math.sin(phi), dist * Math.cos(phi) * Math.cos(theta)];
       const vp0 = M4.mul(M4.persp(fov, aspect, 0.5, 300), M4.lookAt(eye, target, [0, 1, 0]));
-      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-      for (const c of st.fitPts) {
-        const q = M4.apply(vp0, c), x = q[0] / q[3], y = q[1] / q[3];
-        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-      }
-      if (!Number.isFinite(x0)) { x0 = y0 = -1; x1 = y1 = 1; }
-      // the frame: side margins only as wide as the HTML labels, a strip at the bottom for the column headings.
-      // Fit uniformly, then stretch into the free direction so the content fills the box.
       const R = { x0: -1 + 2 * ((st.labelL || 0) + 10) / st.w, x1: 1 - 2 * ((st.labelR || 0) + 10) / st.w, y0: -1 + 2 * 38 / st.h, y1: 1 - 2 * 6 / st.h };
       if (R.x1 - R.x0 < 0.4) { R.x0 = -0.2; R.x1 = 0.2; }
-      const xr = (R.x1 - R.x0) / (x1 - x0), yr = (R.y1 - R.y0) / (y1 - y0), k = Math.min(xr, yr);
-      const kx = Math.min(xr, k * 1.8), ky = Math.min(yr, k * 2.2);
-      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, tx = (R.x0 + R.x1) / 2, ty = (R.y0 + R.y1) / 2;
-      st.vp = M4.mul([kx, 0, 0, 0, 0, ky, 0, 0, 0, 0, 1, 0, tx - kx * cx, ty - ky * cy, 0, 1], vp0);
+      // fit a point set into the frame R: uniform scale, then stretch into the free direction (up to sx / sy)
+      const fitTo = (pts, sx, sy) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const c of pts) {
+          const q = M4.apply(vp0, c), x = q[0] / q[3], y = q[1] / q[3];
+          x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        }
+        if (!Number.isFinite(x0)) { x0 = y0 = -1; x1 = y1 = 1; }
+        const xr = (R.x1 - R.x0) / (x1 - x0 || 1), yr = (R.y1 - R.y0) / (y1 - y0 || 1), k = Math.min(xr, yr);
+        const kx = Math.min(xr, k * sx), ky = Math.min(yr, k * sy);
+        return { kx, ky, ox: (R.x0 + R.x1) / 2 - kx * (x0 + x1) / 2, oy: (R.y0 + R.y1) / 2 - ky * (y0 + y1) / 2 };
+      };
+      const A = fitTo(st.fitPts, 1.8, 2.2);
+      let T = A;
+      if (st.zoom > 0.001 && st.focusPts && st.focusPts.length) {
+        // hovering a bar: zoom onto it and everything it is connected to (at most 3.5x the overview)
+        const B = fitTo(st.focusPts, 1.4, 1.4), lim = 3.5;
+        B.kx = Math.min(B.kx, A.kx * lim); B.ky = Math.min(B.ky, A.ky * lim);
+        const z = st.zoom, e = (a, b) => a + (b - a) * z;
+        // offsets for the capped scale: centre the focus set in the frame
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const c of st.focusPts) { const q = M4.apply(vp0, c), x = q[0] / q[3], y = q[1] / q[3]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        B.ox = (R.x0 + R.x1) / 2 - B.kx * (x0 + x1) / 2; B.oy = (R.y0 + R.y1) / 2 - B.ky * (y0 + y1) / 2;
+        T = { kx: e(A.kx, B.kx), ky: e(A.ky, B.ky), ox: e(A.ox, B.ox), oy: e(A.oy, B.oy) };
+      }
+      const kx = T.kx, ky = T.ky;
+      st.vp = M4.mul([kx, 0, 0, 0, 0, ky, 0, 0, 0, 0, 1, 0, T.ox, T.oy, 0, 1], vp0);
       st.scale = Math.min(kx, ky) * st.h * 1.6;
     }
 
@@ -334,18 +364,25 @@
       for (const l of labels) {
         let [x, y, w] = project(l.p);
         if (l.head) y = st.h - 14;
-        const vis = w > 0 && x > -200 && x < st.w + 200;
+        const vis = w > 0 && x > -40 && x < st.w + 40 && y > -12 && (l.head || y < st.h - 24);
         l.el.style.opacity = vis ? '1' : '0';
         const dx = l.align === 'right' ? '-100%' : l.align === 'center' ? '-50%' : '0';
-        l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(${dx}, -50%)`;
+        const big = st.zoom > 0.01 && l.bar !== undefined && st.rel && st.rel.has(l.bar) ? 1 + 0.3 * st.zoom : 1;
+        l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(${dx}, -50%) scale(${big.toFixed(3)})`;
+        l.el.style.transformOrigin = l.align === 'right' ? '100% 50%' : l.align === 'left' ? '0 50%' : '50% 50%';
       }
     }
 
+    let lastT = 0;
     function frame(now) {
       st.raf = 0;
+      const dt = Math.min(64, now - (lastT || now)); lastT = now;
+      const goal = st.hover >= 0 ? 1 : 0;
+      st.zoom = st.reduced ? goal : st.zoom + (goal - st.zoom) * (1 - Math.exp(-dt / 140));
+      if (Math.abs(goal - st.zoom) < 0.002) st.zoom = goal;
       draw(now);
-      // keep running while particles move; otherwise only redraw on demand
-      const live = !st.reduced && st.phase > 0.02 && st.moves.length;
+      // keep running while particles move or the zoom is settling; otherwise only redraw on demand
+      const live = (!st.reduced && st.phase > 0.02 && st.moves.length) || st.zoom !== goal;
       if (live && st.visible && !document.hidden) st.raf = requestAnimationFrame(frame);
     }
     const start = () => { if (!st.raf) st.raf = requestAnimationFrame(frame); };
@@ -363,16 +400,25 @@
       }
       return best;
     }
+    // hovering a bar zooms onto it; moving off it into empty space keeps the zoom briefly so the view does not
+    // jump back while the pointer travels, a different bar switches the zoom, leaving the canvas resets it
+    let release = 0;
+    const focus = (k) => {
+      clearTimeout(release);
+      if (k === st.hover) return;
+      st.hover = k; st.focusPts = k >= 0 ? focusPoints(k) : st.focusPts; updateBars(); start();
+    };
     canvas.addEventListener('pointermove', (e) => {
       const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
       const k = pick(px, py);
-      if (k !== st.hover) { st.hover = k; updateBars(); start(); }
+      if (k >= 0) focus(k);
+      else if (st.hover >= 0) { clearTimeout(release); release = setTimeout(() => focus(-1), 700); }
       if (opts.onHover) opts.onHover(k >= 0 ? st.bars[k] : null, px, py);
     });
-    canvas.addEventListener('pointerleave', () => { st.hover = -1; updateBars(); if (opts.onHover) opts.onHover(null); start(); });
-    canvas.addEventListener('click', (e) => {          // tap = hover on touch screens
+    canvas.addEventListener('pointerleave', () => { focus(-1); if (opts.onHover) opts.onHover(null); });
+    canvas.addEventListener('click', (e) => {          // tap = hover on touch screens; tapping empty space zooms out
       const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, k = pick(px, py);
-      st.hover = k; updateBars(); start(); if (opts.onHover) opts.onHover(k >= 0 ? st.bars[k] : null, px, py);
+      focus(k); if (opts.onHover) opts.onHover(k >= 0 ? st.bars[k] : null, px, py);
     });
 
     new ResizeObserver(() => { resize(); measure(); start(); }).observe(canvas);

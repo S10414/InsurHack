@@ -886,77 +886,56 @@
     };
   }
 
-  /** Forecast corridor: one row per unit of the next level down. Height = cumulative spend minus cumulative
-   *  budget, as a share of the unit's full-year budget, so the floor is "exactly on budget": a wall of actual
-   *  deviation up to the last closed month, then the forecast and its 80% band to December. */
+  /** Year-end landing: one column per unit of the next level down, standing on a glass floor that is the
+   *  full-year budget. Solid bar = forecast minus budget (up = overrun, down = surplus), glass column = 80% band,
+   *  so a column that straddles the floor is undecided. Heights are linear in % of budget, capped for outliers. */
   function forecastScene() {
-    const u = S.ui.forecast, m = S.month, risk = S.settings.risk;
+    const u = S.ui.forecast, risk = S.settings.risk;
     const members = S.res.series.filter((s) => F.inScope(s, u));
     if (!members.length) return null;
     const level = u.cat ? (u.dept ? 'series' : 'dept') : !u.dept ? 'dept' : (hasProj(u.dept) && u.proj == null ? 'proj' : 'cat');
-    const units = F.aggregate(members, level, risk).filter((g) => g.fyBudget > 0).sort((a, b) => b.rate - a.rate).slice(0, 12);
-    const nR = units.length, SPX = 1.0, SPZ = 1.2;
-    const xOf = (i) => (i - 6) * SPX;                    // i = months elapsed (0..12)
+    const units = F.aggregate(members, level, risk).filter((g) => g.fyBudget > 0).sort((a, b) => b.rate - a.rate).slice(0, 14);
+    const n = units.length, SP = 1.25, W = 0.62, H = 2.2;
+    // linear scale; anything beyond the cap is drawn to the cap with a notch and its true value in the label
+    const absv = units.flatMap((g) => [g.lo / g.fyBudget - 1, g.hi / g.fyBudget - 1].map(Math.abs)).sort((a, b) => b - a);
+    const cap = Math.max(0.04, Math.min(0.10, absv[0] || 0.04));
+    const Yd = (d) => Math.max(-cap, Math.min(cap, d)) / cap * H;
     const boxes = [], lines = [], labels = [], picks = [], fit = [], tris = [];
-    const quad = (a, b, c, d, col, id) => tris.push({ v: [a, b, c, a, c, d], color: col, id });
-    const rows = units.map((g) => {
-      const path = F.groupPath(g.members, m), B = g.fyBudget, bud = [0, ...path.budget];
-      const dev = (v, i) => (v - bud[i]) / B;
-      const act = [0, ...path.actual].map(dev);
-      const fc = [act[m], ...path.forecast.map((v, k) => dev(v, m + k + 1))];
-      const lo = [act[m], ...path.lo.map((v, k) => dev(v, m + k + 1))], hi = [act[m], ...path.hi.map((v, k) => dev(v, m + k + 1))];
-      return { g, B, bud, act, fc, lo, hi };
-    });
-    // vertical scale: signed square root, so a −23% outlier does not flatten the ±3% rows; the largest reaches 2 units
-    const span = Math.max(0.05, ...rows.flatMap((q) => [...q.act, ...q.lo, ...q.hi].map(Math.abs)));
-    const sq = (d) => Math.sign(d) * Math.sqrt(Math.abs(d) / span) * 2.0;
-    for (const q of rows) for (const k of ['act', 'fc', 'lo', 'hi']) q[k + 'Y'] = q[k].map(sq);
-    rows.forEach(({ g, B, bud, act, fc, lo, hi, actY, fcY, loY, hiY }, r) => {
-      const z = (r - (nR - 1) / 2) * SPZ, col = riskRGB(g.risk);
-      for (let i = 0; i < m; i++) {
-        quad([xOf(i), 0, z], [xOf(i + 1), 0, z], [xOf(i + 1), actY[i + 1], z], [xOf(i), actY[i], z], [...RGB.act, 0.55], r);
-        lines.push({ a: [xOf(i), actY[i], z], b: [xOf(i + 1), actY[i + 1], z], color: [0.82, 0.90, 0.98, 0.95], id: r });
-      }
-      for (let k = 0; k < 12 - m; k++) {
-        const i = m + k;
-        quad([xOf(i), 0, z], [xOf(i + 1), 0, z], [xOf(i + 1), fcY[k + 1], z], [xOf(i), fcY[k], z], [...col, 0.18], r);
-        quad([xOf(i), loY[k], z], [xOf(i + 1), loY[k + 1], z], [xOf(i + 1), hiY[k + 1], z], [xOf(i), hiY[k], z], [...col, 0.5], r);
-        lines.push({ a: [xOf(i), fcY[k], z], b: [xOf(i + 1), fcY[k + 1], z], color: [...col.map((c) => Math.min(1, c + 0.2)), 1], id: r });
-      }
-      const end = fcY[12 - m];
-      boxes.push({ x: xOf(12), z, y0: Math.min(0, end), y1: Math.max(0, end) + 0.01, w: 0.14, d: 0.14, color: col, id: r });
+    const xOf = (i) => (i - (n - 1) / 2) * SP;
+    const x0 = xOf(0) - SP / 2, x1 = xOf(n - 1) + SP / 2, z0 = -0.9, z1 = 0.9;
+    tris.push({ v: [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z0], [x1, 0, z1], [x0, 0, z1]], color: [0.80, 0.86, 0.95, 0.16] });
+    lines.push({ a: [x0, 0, z0], b: [x1, 0, z0], color: [0.93, 0.96, 1, 0.35] }, { a: [x0, 0, z1], b: [x1, 0, z1], color: [0.93, 0.96, 1, 0.85] },
+      { a: [x0, 0, z0], b: [x0, 0, z1], color: [0.93, 0.96, 1, 0.5] }, { a: [x1, 0, z0], b: [x1, 0, z1], color: [0.93, 0.96, 1, 0.5] });
+    labels.push({ text: '預算', p: [x0 - 0.15, 0, z1], align: 'right', cls: 'axis zero' });
+    units.forEach((g, i) => {
+      const x = xOf(i), d = g.rate - 1, lo = g.lo / g.fyBudget - 1, hi = g.hi / g.fyBudget - 1, col = riskRGB(g.risk);
+      const yd = Yd(d), clipped = Math.abs(d) > cap;
+      boxes.push({ x, z: 0, y0: Yd(lo), y1: Yd(hi), w: W + 0.22, d: W + 0.22, color: col, alpha: 0.22, id: i });
+      boxes.push({ x, z: 0, y0: Math.min(0, yd), y1: Math.max(0, yd) + (Math.abs(yd) < 0.02 ? 0.02 : 0), w: W, d: W, color: col, id: i });
+      if (clipped) boxes.push({ x, z: 0, y0: yd - Math.sign(d) * 0.18, y1: yd - Math.sign(d) * 0.12, w: W + 0.02, d: W + 0.02, color: [0.06, 0.11, 0.19], id: i });
       const name = level === 'proj' ? projLabel(g.proj) : level === 'series' ? (g.proj ? projLabel(g.proj) + '・' : '') + g.cat : g.name;
-      labels.push({ text: name, p: [xOf(0) - 0.3, 0, z], align: 'right', cls: 'row', id: r });
-      labels.push({ html: `<b class="${g.rate > 1 ? 'pos' : 'neg'}">${Pc(g.rate)}</b>`, p: [xOf(12) + 0.35, end, z], align: 'left', cls: 'end', id: r });
-      for (let i = 0; i <= 12; i++) fit.push([xOf(i), i <= m ? actY[i] : fcY[i - m], z], [xOf(i), 0, z]);
-      for (let k = 0; k <= 12 - m; k++) fit.push([xOf(m + k), hiY[k], z], [xOf(m + k), loY[k], z]);
-      fit.push([xOf(12) + 0.35, end, z]);
+      const top = d >= 0 ? Math.max(yd, Yd(hi)) : Math.min(yd, Yd(lo));
+      labels.push({ html: `<b class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}</b><i>超支機率 ${Pc(g.pOver)}</i>`,
+        p: [x, top + (d >= 0 ? 0.25 : -0.25), 0], align: 'center', cls: 'val ' + (d >= 0 ? 'up' : 'down'), id: i, reserve: false });
+      labels.push({ text: name, p: d >= 0 ? [x, 0, z1 + 0.35] : [x, 0.32, z0], align: 'center', cls: 'name', id: i, reserve: false });
+      for (const y of [Yd(lo), Yd(hi), yd, top + (d >= 0 ? 0.6 : -0.6)]) fit.push([x - W / 2 - 0.11, y, -W / 2 - 0.11], [x + W / 2 + 0.11, y, W / 2 + 0.11]);
       const go = level === 'dept' ? () => openForecast(g.dept, null, u.cat)
         : level === 'proj' ? () => openForecast(g.dept, g.proj, u.cat)
           : level === 'cat' ? () => openForecast(u.dept, u.proj, g.cat) : null;
-      for (let i = 1; i <= 12; i++) {
-        const isF = i > m, d = isF ? fc[i - m] : act[i], v = d * B + bud[i];
-        picks.push({ a: [xOf(i), isF ? fcY[i - m] : actY[i], z], r: 16, group: r, data: {
-          tip: `<b>${esc(name)}</b>　${S.year} 年 1–${i} 月累計${isF ? '（預測）' : ''}<br>${isF ? '預測' : '實際'} ${A(v)}　預算 ${A(bud[i])}<br><span class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '高於' : '低於'}累計預算 ${A(Math.abs(d * B))}</span>${isF ? `<br>80% 區間 ${A(lo[i - m] * B + bud[i])}～${A(hi[i - m] * B + bud[i])}` : ''}<br>全年預測為預算的 <span class="${g.rate > 1 ? 'pos' : 'neg'}">${Pc(g.rate, 1)}</span>（${esc(g.risk)}）${go ? '<br><span class="small">點選看這個項目的年底預測</span>' : ''}`,
-          go } });
-      }
+      picks.push({ a: [x, Yd(lo), 0], b: [x, Yd(hi), 0], r: 26, group: i, data: {
+        tip: `<b>${esc(name)}</b>　${pill(g.risk)}<br>預測全年 ${A(g.fyForecast)}　預算 ${A(g.fyBudget)}<br><span class="${g.gap > 0 ? 'pos' : 'neg'}">預計${g.gap > 0 ? '超支' : '結餘'} ${A(Math.abs(g.gap))}（${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}）</span><br>80% 區間 ${A(g.lo)}～${A(g.hi)}<br>超支機率 ${Pc(g.pOver)}${go ? '<br><span class="small">點選看這個項目的年底預測</span>' : ''}`,
+        go } });
     });
-    const z0 = -(nR / 2) * SPZ, z1 = (nR / 2) * SPZ, grid = [0.62, 0.70, 0.82, 0.16];
-    tris.unshift({ v: [[xOf(0), -0.006, z0], [xOf(12), -0.006, z0], [xOf(12), -0.006, z1], [xOf(0), -0.006, z0], [xOf(12), -0.006, z1], [xOf(0), -0.006, z1]], color: [0.06, 0.11, 0.19, 0.55] });
-    for (let i = 0; i <= 12; i++) lines.push({ a: [xOf(i), 0, z0], b: [xOf(i), 0, z1], color: grid });
-    for (let r = 0; r < nR; r++) { const z = (r - (nR - 1) / 2) * SPZ; lines.push({ a: [xOf(0), 0, z], b: [xOf(12), 0, z], color: [0.93, 0.96, 1, 0.35], id: r }); }
-    lines.push({ a: [xOf(m), 0.002, z0 - 0.3], b: [xOf(m), 0.002, z1 + 0.3], color: [0.95, 0.80, 0.45, 0.8] });
-    for (let i = 1; i <= 12; i++) labels.push({ text: `${i}月`, p: [xOf(i), 0, z1 + 0.5], align: 'center', cls: 'month' + (i > m ? ' f' : '') + (i % 3 ? ' alt' : ''), reserve: false });
-    fit.push([xOf(0), 0, z1 + 0.7], [xOf(12), 0, z1 + 0.7]);
+    for (const x of [x0, x1]) fit.push([x, 0, z0], [x, 0, z1 + 0.7], [x, 0.6, z0]);
     const scope = [u.dept, u.proj != null && u.dept && hasProj(u.dept) ? projLabel(u.proj) : '', u.cat].filter(Boolean).join('・') || '全公司';
     const unitName = { dept: '部門', proj: '專案', cat: '費用科目', series: '項目' }[level];
     return {
-      title: '年底預測走廊', sub: `${scope}：各${unitName}累計支出與累計預算的差距（地面 = 符合預算），${m} 月底以後為預測`,
-      aria: '各單位累計支出與年底預測區間的立體圖',
-      legend: `<li><i class="sw act"></i>累計實際與預算的差距</li><li><i class="sw band"></i>預測與 80% 區間，顏色為燈號</li><li class="hint">高於地面 = 超出累計預算，高度採平方根刻度；右側百分比 = 全年預測 ÷ 預算${level !== 'series' ? '；點選可往下看' : ''}</li>`,
-      sig: ['f', level, u.dept, u.proj, u.cat, m, JSON.stringify(risk), units.map((g) => g.name + Math.round(g.fyForecast)).join()].join('|'),
-      camera: { phi: 0.38, theta: -0.38, phiNarrow: 0.6, thetaNarrow: -0.2, sx: 1.8, sy: 2.0, syNarrow: 3.2, bottom: 6, top: 10 },
-      anim: { from: { reveal: xOf(0) - 0.01 }, to: { reveal: xOf(12) + 3 }, duration: 1.6 },
+      title: '年底落點', sub: `${scope}：各${unitName}預測全年支出比預算多或少多少`,
+      aria: '各單位年底預測相對預算的超支或結餘立體圖',
+      legend: `<li><i class="sw over"></i>預計超支</li><li><i class="sw amber"></i>黃燈</li><li><i class="sw under"></i>預計結餘</li><li><i class="sw glass"></i>80% 區間（跨過地面 = 方向未定）</li><li class="hint">地面 = 全年預算；高度 = 預測 ÷ 預算 − 1，超過 ±${Pc(cap)} 截斷${level !== 'series' ? '；點選可往下看' : ''}</li>`,
+      sig: ['f2', level, u.dept, u.proj, u.cat, S.month, JSON.stringify(risk), units.map((g) => g.name + Math.round(g.fyForecast)).join()].join('|'),
+      camera: { phi: 0.24, theta: -0.14, phiNarrow: 0.3, thetaNarrow: -0.08, sx: 1.8, sy: 1.8, syNarrow: 2.6, bottom: 8, top: 8 },
+      anim: { from: { grow: 0 }, to: { grow: 1 }, duration: 1.1 },
       scene: { boxes, lines, labels, picks, fit, tris },
     };
   }

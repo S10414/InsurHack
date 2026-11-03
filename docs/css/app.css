@@ -209,3 +209,12 @@ td .sub{display:block;font-size:12px;color:var(--mute);line-height:1.3}
 .sw.win{background:rgba(242,207,115,.35);outline:1px solid rgba(242,207,115,.6)}
 @media(max-width:640px){.sc-sub{display:none}}
 .sc-labels.compact .month.alt{display:none}
+.sc-labels .val{display:flex;flex-direction:column;align-items:center;line-height:1.2;text-shadow:0 0 4px var(--hero),0 0 8px var(--hero)}
+.sc-labels .val b{font-size:13px;font-weight:600}.sc-labels .val .pos{color:#ff8a7a}.sc-labels .val .neg{color:#5fd3b7}
+.sc-labels .val i{font-style:normal;font-size:10.5px;color:var(--hero-mute)}
+.sc-labels .val.down{flex-direction:column-reverse}
+.sc-labels .name{color:#dbe4ee;font-size:12px}
+.sc-labels .axis{font-size:10.5px;color:#7f8fa5}.sc-labels .axis.zero{color:#eef3f8}
+.sc-labels.compact .name{writing-mode:vertical-rl;font-size:11px;transform-origin:center}
+.sc-labels.compact .val i{display:none}.sc-labels.compact .val b{font-size:10.5px}
+.sw.amber{background:#f2b34d}.sw.glass{background:rgba(128,148,179,.25);outline:1px solid rgba(200,215,235,.5)}

@@ -328,20 +328,12 @@
   function viewAlerts() {
     const u = S.ui.alerts, r = S.settings.risk;
     const list = S.alerts.filter((a) => u.level === 'all' || a.level === u.level);
-    const num = (label, key, val, scale, step) => `<label>${label} <input type="number" step="${step}" value="${+(val / scale).toFixed(3)}" data-risk="${key}" data-scale="${scale}"></label>`;
     return `
-      <div class="card"><h3>預警規則（可調整，變更後立即重新計算）</h3>
-        <div class="row">
-          ${num('紅燈：超支機率 ≥ (%)', 'pRed', r.pRed, 0.01, 5)}${num('且超支 ≥ 預算 (%)', 'redPct', r.redPct, 0.01, 0.5)}${num('且超支金額 ≥ (百萬元)', 'minAmount', r.minAmount, 1e6, 0.5)}
-        </div><div class="row">
-          ${num('黃燈（落後）：預測 < 預算 (%)', 'underRate', r.underRate, 0.01, 5)}${num('黃燈（小幅超支）：機率 ≥ (%)', 'pYellow', r.pYellow, 0.01, 5)}${num('且超支 ≥ 預算 (%)', 'yellowPct', r.yellowPct, 0.01, 0.5)}
-          <button class="btn" data-risk-reset>恢復預設</button>
-        </div>
-        <p class="small" style="margin:0">金額門檻避免小科目因百分比波動而亮紅燈。機率來自預測區間；單月異常與季節性落後另列為提示。</p></div>
-      <div class="row" style="margin-top:14px"><div class="chips">${[['all', '全部'], ['紅燈', '紅燈'], ['黃燈', '黃燈'], ['提示', '提示']].map(([k, l]) => `<button class="chip ${u.level === k ? 'on' : ''}" data-chip="alerts.level:${k}">${l}（${S.alerts.filter((a) => k === 'all' || a.level === k).length}）</button>`).join('')}</div>
+      <div class="row"><div class="chips">${[['all', '全部'], ['紅燈', '紅燈'], ['黃燈', '黃燈'], ['提示', '提示']].map(([k, l]) => `<button class="chip ${u.level === k ? 'on' : ''}" data-chip="alerts.level:${k}">${l}（${S.alerts.filter((a) => k === 'all' || a.level === k).length}）</button>`).join('')}</div>
         <button class="btn" data-export="alerts">匯出 CSV</button><button class="btn" data-export="alerts" data-fmt="xlsx">匯出 Excel</button></div>
       ${list.map((a) => `<div class="alert ${a.level === '紅燈' ? 'red' : a.level === '黃燈' ? 'amber' : 'info'}"><div class="t"><span class="pill ${a.level === '紅燈' ? 'red' : a.level === '黃燈' ? 'amber' : 'info'}">${a.level}</span>${esc(a.title)}：${esc(a.type.replace(/^[紅黃]燈・/, ''))}</div>
-        <div class="x">${esc(a.text)}</div><div class="a"><b>建議：</b>${esc(a.action)}</div></div>`).join('') || '<div class="empty">沒有符合的預警</div>'}`;
+        <div class="x">${esc(a.text)}</div><div class="a"><b>建議：</b>${esc(a.action)}</div></div>`).join('') || '<div class="empty">沒有符合的預警</div>'}
+      <p class="small foot">預警規則：紅燈為預測全年超支機率 ≥ ${Pc(r.pRed)}，且超支 ≥ 預算 ${Pc(r.redPct, 1)}、超支金額 ≥ ${A(r.minAmount)}；黃燈為預測全年低於預算的 ${Pc(r.underRate)} 且結餘 ≥ ${A(r.minAmount)}（大幅未執行），或超支機率 ≥ ${Pc(r.pYellow)} 且超支 ≥ 預算 ${Pc(r.yellowPct, 1)}。金額門檻避免小科目因百分比波動而亮紅燈；機率來自預測區間，單月異常與季節性落後另列為提示。</p>`;
   }
 
   /** History drills like the overview: departments -> projects -> expense categories of one project. */
@@ -753,9 +745,17 @@
     el.querySelector('[data-flow-play]').addEventListener('click', playFlow);
     return el;
   }
+  let flowTimer = 0;
   function playFlow() {
     const range = flowEl.querySelector('input');
     if (flowTween) flowTween.kill();
+    clearTimeout(flowTimer);
+    // replay every 5 s while the chart is on screen (not with reduced motion, not while the reader is hovering a bar)
+    if (MO.enabled && window.gsap) flowTimer = setTimeout(function again() {
+      if (!flowEl || !flowEl.isConnected) return;
+      if (flow.state.visible && !document.hidden && flow.state.hover < 0) return playFlow();
+      flowTimer = setTimeout(again, 1000);
+    }, 5000);
     if (!MO.enabled || !window.gsap) { flow.setPhase(1); range.value = 100; return; }
     const o = { p: 0 };
     flow.setPhase(0);

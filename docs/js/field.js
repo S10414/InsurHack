@@ -258,14 +258,12 @@
         const q = M4.apply(vp0, c), x = q[0] / q[3], y = q[1] / q[3];
         x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
       }
-      // target rectangle in clip space: on wide screens the field sits to the right of the headline,
-      // and slides to the centre as it tilts into the top-down view
-      const wide = st.w >= 1000 && st.w / st.h > 1.2;
-      const t = st.tilt;
-      const R = wide ? { x0: -0.10 * (1 - t) - 0.62 * t, x1: 0.96 * (1 - t) + 0.62 * t, y0: -0.90, y1: 0.86 * (1 - t) + 0.70 * t }
-        : { x0: -0.92, x1: 0.92, y0: -0.88, y1: 0.88 };
+      // target rectangle in clip space: the field has its own box below the headline, beside the legend.
+      // Fit it, then anchor it to the left (next to the legend, aligned with the headline) with room
+      // for the department labels.
+      const R = { x0: -0.90, x1: 0.96, y0: -0.90, y1: 0.90 };
       const k = Math.min((R.x1 - R.x0) / (x1 - x0), (R.y1 - R.y0) / (y1 - y0)), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-      const tx = (R.x0 + R.x1) / 2, ty = (R.y0 + R.y1) / 2;
+      const tx = R.x0 + k * (x1 - x0) / 2, ty = (R.y0 + R.y1) / 2;
       const post = [k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, tx - k * cx, ty - k * cy, 0, 1];
       st.eye = eye; st.vp = M4.mul(post, vp0); st.dist = dist;
     }

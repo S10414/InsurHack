@@ -22,7 +22,8 @@
   </div>
   <div class="hero-copy wrap">
     <h1 class="hero-title" id="hero-title"></h1>
-    <p class="hero-sub" id="hero-sub"></p>
+  </div>
+  <div class="hero-stage wrap">
     <ul class="hero-legend" aria-label="圖例">
       <li><i class="sw over"></i>高於預算</li>
       <li><i class="sw mid"></i>接近預算</li>
@@ -30,11 +31,11 @@
       <li><i class="sw plate"></i>當月預算</li>
       <li><i class="sw fc"></i>預測月份</li>
     </ul>
-  </div>
-  <div class="hero-stage">
-    <canvas id="field" aria-label="各部門每月支出與預算的立體圖"></canvas>
-    <div class="field-labels" id="field-labels" aria-hidden="true"></div>
-    <div class="field-tip" id="field-tip" hidden></div>
+    <div class="field-wrap">
+      <canvas id="field" aria-label="各部門每月支出與預算的立體圖"></canvas>
+      <div class="field-labels" id="field-labels" aria-hidden="true"></div>
+      <div class="field-tip" id="field-tip" hidden></div>
+    </div>
     <button class="scroll-cue" id="cue" type="button">往下開始分析</button>
   </div>
 </header>

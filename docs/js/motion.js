@@ -40,7 +40,7 @@
     const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
     tl.from('.hero-title .ln > span', { yPercent: 105, duration: 0.9, stagger: 0.1 }, 0)
       .add(() => nums.forEach(countUp), 0.15)
-      .from('.hero-sub, .hero-legend', { opacity: 0, y: 10, duration: 0.7, stagger: 0.08 }, 0.45);
+      .from('.hero-legend li', { opacity: 0, x: -8, duration: 0.5, stagger: 0.06 }, 0.45);
     if (field) tl.to(g, { v: 2, duration: 2.2, ease: 'power2.out', onUpdate: () => field.setGrow(g.v) }, 0.2);
   }
 
@@ -63,7 +63,6 @@
     });
     pinTrigger.to(tilt, { t: 1, ease: 'none', onUpdate: () => f.setTilt(tilt.t) }, 0)
       .to(".hero-copy", { opacity: 0, y: -24, ease: "none" }, 0)
-      .fromTo(".hero", { "--veil": 1 }, { "--veil": 0, ease: "none" }, 0)
       .to('.scroll-cue', { opacity: 0, ease: 'none', duration: 0.2 }, 0);
   }
 

@@ -105,8 +105,11 @@
   function strip(items, total, attr) {
     return `<div class="strip" role="list">${items.map((d) => {
       const w = Math.max(d.fyBudget / total * 100, 0.6);
-      return `<button type="button" role="listitem" class="seg ${rcls(d.risk)}" style="flex:${w} 1 0" ${attr(d)} title="${esc(d.label)}｜預算 ${M(d.fyBudget)}｜預測 ${Pc(d.rate, 1)}｜${esc(d.risk)}">
-        <span class="nm">${esc(d.label)}</span><span class="rt">${Pc(d.rate, 0)}</span></button>`;
+      const dev = d.rate - 1;
+      const devTxt = `${dev > 0 ? '+' : dev < 0 ? '−' : ''}${(Math.abs(dev) * 100).toFixed(1)}%`;
+      return `<button type="button" role="listitem" class="seg ${rcls(d.risk)}" style="flex:${w} 1 0" ${attr(d)}
+        title="${esc(d.label)}｜全年預算 ${M(d.fyBudget)}｜預測全年 ${M(d.fyForecast)}｜${d.gap >= 0 ? '超支' : '結餘'} ${M(Math.abs(d.gap))} 百萬元（${devTxt}）｜${esc(d.risk)}">
+        <span class="nm">${esc(d.label)}</span><span class="rt">${devTxt}</span></button>`;
     }).join('')}</div>`;
   }
   const nonRed = () => S.alerts.filter((a) => a.level === '紅燈').length;
@@ -168,7 +171,7 @@
       ${crumbs(f, 'data-drill')}
       <div class="kpis">${kp.map(([l, v, n]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('')}</div>
       <div class="card strip-card"><h3>${esc(name)}的預算組成</h3>
-        <p class="small" style="margin:0 0 8px">寬度 = 全年預算占比，顏色 = 燈號，數字 = 預測全年 ÷ 預算。${hint}。</p>
+        <p class="small" style="margin:0 0 8px">每一段的寬度是占全年預算的比例；數字是預測全年偏離預算多少，＋為預計超支、−為預計結餘；顏色是燈號。${hint}。</p>
         ${strip(sortRows(all, 'fyBudget', -1), total.fyBudget, go)}
         ${hidden.length ? `<p class="small hidden-risk">${hidden.map((d) => `<b>${esc(d.dept)}</b>整體為綠燈，但內含 ${d.nRed ? d.nRed + ' 個紅燈' : ''}${d.nRed && d.nAmber ? '、' : ''}${d.nAmber ? d.nAmber + ' 個黃燈' : ''}專案`).join('；')}。部門合計會讓專案的超支與結餘互相抵銷。</p>` : ''}
       </div>
@@ -580,16 +583,12 @@
   }
 
   function renderHero(replay) {
-    const title = $('#hero-title'), sub = $('#hero-sub');
-    if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; sub.textContent = ''; return; }
+    const title = $('#hero-title');
+    if (!S.res) { title.innerHTML = '<span class="ln"><span>載入資料後開始分析</span></span>'; return; }
     const t = F.aggregate(S.res.series, 'total', S.settings.risk)[0];
-    const over = S.res.series.filter((s) => s.risk.startsWith('紅')).length;
-    const under = S.res.series.filter((s) => s.risk === '黃燈・預計大幅未執行').length;
     const gapM = Math.abs(t.gap) / 1e6;
     title.innerHTML =
-      `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <span class="nw"><b data-v="${gapM.toFixed(1)}" data-d="1">${gapM.toFixed(1)}</b> 百萬元</span></span></span>` +
-      `<span class="ln sm"><span><b data-v="${over}">${over}</b> 個項目可能超支，<b data-v="${under}">${under}</b> 個項目明顯用不完</span></span>`;
-    sub.innerHTML = `資料截至 ${S.year} 年 ${S.month} 月底，${depts().length} 個部門、${cats().length} 類費用。每根柱子是一個部門一個月的支出，白色薄板是當月預算，${S.month + 1} 月起為預測。移到柱子上看數字，點一下打開該部門的各專案。`;
+      `<span class="ln"><span>${S.year} 年預計${t.gap < 0 ? '結餘' : '超支'} <b data-v="${gapM.toFixed(1)}" data-d="1">${gapM.toFixed(1)}</b> 百萬元</span></span>`;
     if (field) field.setData({ rows: heroRows(), closed: S.month });
     if (!heroPlayed) { heroPlayed = true; MO.heroIntro(field); }
     else if (replay) { MO.refreshHeroNumbers(); MO.regrow(); }

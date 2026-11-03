@@ -834,7 +834,8 @@
   function varianceScene() {
     const u = S.ui.variance, P = S.res.panel, mp = S.settings.materialPct, ma = S.settings.materialAmount;
     const o = { dept: u.dept || null, proj: u.proj, materialPct: mp, materialAmount: ma };
-    const items = F.variance(P, u.level, u.window, o).filter((v) => Number.isFinite(v.variancePct)).slice(0, 12);
+    // the 12 largest |variance| items, laid out left to right from the largest overspend to the largest shortfall
+    const items = F.variance(P, u.level, u.window, o).filter((v) => Number.isFinite(v.variancePct)).slice(0, 12).sort((a, b) => b.variancePct - a.variancePct);
     if (!items.length) return null;
     const refW = u.window === 'ytd' ? 'month' : 'ytd', refL = refW === 'ytd' ? '年累計' : '當月';
     const ref = new Map(F.variance(P, u.level, refW, o).map((v) => [v.name, v]));

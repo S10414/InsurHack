@@ -141,6 +141,55 @@
     return a.map((x, i) => x + (b[i] - x) * e);
   }
 
+  // ------------------------------------------------------------------ drag-to-rotate (shared with flow.js)
+  /** Horizontal drag / swipe turns the view (st.yaw); release keeps spinning briefly. Vertical swipes still
+   *  scroll the page (touch-action: pan-y). Arrow keys do the same when the canvas has focus. A drag
+   *  sets st.dragged so the click that ends it does not count as a pick. */
+  function orbit(canvas, st, kick, lim = 1.25) {
+    canvas.style.touchAction = 'pan-y';
+    if (!canvas.hasAttribute('tabindex')) canvas.tabIndex = 0;
+    st.yaw = st.yaw || 0; st.vel = 0; st.dragging = false; st.dragged = false;
+    const clamp = (v) => Math.max(-lim, Math.min(lim, v));
+    let d = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      d = { x: e.clientX, y: e.clientY, yaw: st.yaw, lx: e.clientX, lt: performance.now(), id: e.pointerId };
+      st.dragged = false; st.vel = 0;
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!d || e.pointerId !== d.id) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (!st.dragging) {
+        if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
+        st.dragging = st.dragged = true; canvas.classList.add('dragging');
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      }
+      const now = performance.now(), w = canvas.clientWidth || 1;
+      st.yaw = clamp(d.yaw + dx / w * 2.6);
+      const dt = Math.max(1, now - d.lt);
+      st.vel = 0.7 * st.vel + 0.3 * ((e.clientX - d.lx) / w * 2.6 / dt);   // rad per ms
+      d.lx = e.clientX; d.lt = now; kick();
+    });
+    const end = () => {
+      if (!d) return;
+      d = null;
+      if (st.dragging) { st.dragging = false; canvas.classList.remove('dragging'); if (st.reduced) st.vel = 0; kick(); }
+    };
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault(); st.vel = 0; st.yaw = clamp(st.yaw + (e.key === 'ArrowLeft' ? -0.15 : 0.15)); kick();
+    });
+    canvas.addEventListener('dblclick', () => { st.vel = 0; st.yaw = 0; kick(); });
+    /** Advance inertia; returns true while still moving. */
+    return function step(dt) {
+      if (st.dragging || Math.abs(st.vel) < 2e-5) { if (!st.dragging) st.vel = 0; return st.dragging; }
+      const y = st.yaw + st.vel * dt, c = clamp(y);
+      st.yaw = c; st.vel = c !== y ? 0 : st.vel * Math.pow(0.994, dt);
+      return true;
+    };
+  }
+
   // ------------------------------------------------------------------ field
   function create(canvas, labelLayer, opts = {}) {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
@@ -252,9 +301,9 @@
       const narrow = aspect < 1.1;                               // phones: steeper, straighter start so 12 months stay legible
       const phi0 = narrow ? 0.95 : 0.62;
       const phi = phi0 + st.tilt * (1.48 - phi0);                // elevation: oblique -> near top-down
-      const theta = (narrow ? -0.22 : -0.50) * (1 - st.tilt) + st.sway + st.mx * 0.04 * (1 - st.tilt);
+      const theta = (narrow ? -0.22 : -0.50) * (1 - st.tilt) + st.sway + st.yaw + (st.dragging ? 0 : st.mx * 0.04 * (1 - st.tilt));
       const target = [0, 0.5 * (1 - st.tilt), 0];
-      const up = st.tilt > 0.97 ? [0, 0, -1] : [0, 1, 0];
+      const up = st.tilt > 0.97 ? [-Math.sin(theta), 0, -Math.cos(theta)] : [0, 1, 0];
       const proj = M4.persp(fov, aspect, 0.5, 300);
       let corners = st.fitPts;
       if (!corners || !corners.length) {
@@ -332,8 +381,10 @@
       }
     }
 
+    let lastT = 0, spin = null;
     function frame(now) {
       st.raf = 0;
+      if (spin) spin(Math.min(64, now - (lastT || now))); lastT = now;
       if (!st.reduced) st.sway = Math.sin((now - st.t0) / 7000) * 0.07 * (1 - st.tilt);
       draw();
       if (st.visible && !document.hidden) st.raf = requestAnimationFrame(frame);
@@ -360,13 +411,14 @@
     canvas.addEventListener('pointermove', (e) => {
       const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
       st.mx = px / r.width * 2 - 1; st.my = py / r.height * 2 - 1;
-      const k = pick(px, py);
+      const k = st.dragging ? -1 : pick(px, py);
       if (k !== st.hover) { st.hover = k; canvas.style.cursor = k >= 0 ? 'pointer' : ''; }
       if (st.onHover) st.onHover(k >= 0 ? st.cells[k] : null, px, py);
       start();
     });
     canvas.addEventListener('pointerleave', () => { st.hover = -1; st.mx = st.my = 0; if (st.onHover) st.onHover(null); start(); });
-    canvas.addEventListener('click', () => { if (st.hover >= 0 && st.onPick) st.onPick(st.cells[st.hover]); });
+    canvas.addEventListener('click', () => { if (st.dragged) { st.dragged = false; return; } if (st.hover >= 0 && st.onPick) st.onPick(st.cells[st.hover]); });
+    spin = orbit(canvas, st, () => start());
 
     new ResizeObserver(() => { resize(); start(); }).observe(canvas);
     new IntersectionObserver((es) => { st.visible = es[0].isIntersecting; if (st.visible) start(); }).observe(canvas);
@@ -382,5 +434,5 @@
     };
   }
 
-  root.FPAField = { create, colorFor };
+  root.FPAField = { create, colorFor, M4, compile, boxGeometry, orbit };
 })(window);

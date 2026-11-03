@@ -392,6 +392,7 @@
         <div class="kpi"><div class="l">建議調配金額</div><div class="v">${M(sm.used)}</div><div class="n">${ra.moves.length} 筆</div></div>
         <div class="kpi"><div class="l">缺口補足比例</div><div class="v">${sm.totalNeed ? Pc(sm.covered / sm.totalNeed, sm.totalNeed - sm.covered > 1 ? 1 : 0) : '–'}</div><div class="n">${sm.totalNeed - sm.covered > 1 ? '未補足 ' + M(sm.totalNeed - sm.covered) + ' 百萬元，需追加預算' : '全數可由內部調配'}</div></div>
       </div>
+      ${ra.moves.length || ra.receivers.length ? '<div id="flow-slot"></div>' : ''}
       <h2>調配建議</h2>
       <div class="card tw">${ra.moves.length ? `<table><thead><tr><th class="l">自（部門・專案・科目）</th><th class="l">至（部門・專案・科目）</th><th class="l">類型</th><th>金額（百萬元）</th><th class="l">提醒</th></tr></thead><tbody>
         ${ra.moves.map((x) => `<tr><td class="l">${esc(x.from)}</td><td class="l">${esc(x.to)}</td><td class="l nw">${moveType(x)}</td><td class="hl">${M(x.amount)}</td><td class="l small nw">${x.notes.map(esc).join('；') || '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">目前沒有需要或可以調配的項目</div>'}</div>
@@ -451,6 +452,7 @@
     if (S.tab === 'overview' && g('ch-total')) { C.cumulative(g('ch-total'), S._chartPath, S.month, g('tip-total')); if (anim) MO.revealChart(g('ch-total')); }
     if (S.tab === 'forecast' && g('ch-fc')) { C.cumulative(g('ch-fc'), S._chartPath, S.month, g('tip-fc')); if (anim) MO.revealChart(g('ch-fc')); }
     if (S.tab !== lastTab) { MO.tabEnter($('#view')); lastTab = S.tab; }
+    if (S.tab === 'realloc' && g('flow-slot')) mountFlow(g('flow-slot'));
     if (S.tab === 'variance') {
       const u = S.ui.variance, P = S.res.panel, sel = u.sel || {};
       const vars = F.variance(P, u.level, u.window, { dept: u.dept || null, proj: u.proj });
@@ -700,6 +702,75 @@
     } catch (e) { field = null; console.warn('WebGL field disabled:', e.message); }
     if (!field) document.body.classList.add('no-webgl');
     else MO.pinHero($('#hero'), field);
+  }
+
+
+  // ------------------------------------------------------------------ reallocation flow (WebGL)
+  // The canvas is built once and moved into each fresh render of the tab, so the GL context survives re-renders.
+  let flow = null, flowEl = null, flowSig = '', flowTween = null;
+  function flowData() {
+    const u = S.ui.realloc, ra = F.reallocate(S.res, S.hist, { safety: u.safety, minAmount: u.minAmount, allowCross: u.cross });
+    const key = (dept, proj, cat) => F.lineKey({ dept, proj, cat });
+    const used = new Map(), got = new Map();
+    for (const m of ra.moves) {
+      const a = key(m.fromDept, m.fromProj, m.fromCat), b = key(m.toDept, m.toProj, m.toCat);
+      used.set(a, (used.get(a) || 0) + m.amount); got.set(b, (got.get(b) || 0) + m.amount);
+    }
+    const lab = (s) => ({ name: s.proj || s.dept, sub: (s.proj ? s.dept + '・' : '') + s.cat });
+    // donors: only the ones that actually give something (largest first); receivers: every line with a gap
+    const donors = ra.donors.filter((d) => used.has(F.lineKey(d.s))).map((d) => ({ key: F.lineKey(d.s), ...lab(d.s), cap: d.cap, used: used.get(F.lineKey(d.s)) }))
+      .sort((a, b) => b.used - a.used);
+    const receivers = ra.receivers.map((r) => ({ key: F.lineKey(r.s), ...lab(r.s), need: r.need, got: got.get(F.lineKey(r.s)) || 0 }));
+    const moves = ra.moves.map((m) => ({ from: key(m.fromDept, m.fromProj, m.fromCat), to: key(m.toDept, m.toProj, m.toCat), amount: m.amount, cross: m.cross }));
+    return { donors, receivers, moves };
+  }
+  function buildFlowEl() {
+    const el = document.createElement('div');
+    el.className = 'flow-card';
+    el.innerHTML = `
+      <div class="flow-head"><h3>調配流向</h3>
+        <div class="flow-ctl"><button class="btn" type="button" data-flow-play>重新播放</button>
+          <label>調配前 <input type="range" min="0" max="100" value="100" aria-label="調配前後"> 調配後</label></div></div>
+      <div class="flow-wrap"><canvas aria-label="預算調配流向立體圖：左側為可釋出餘額，右側為預計超支缺口，中間的帶狀為每筆調配"></canvas>
+        <div class="field-labels flow-labels"></div><div class="field-tip" hidden></div></div>
+      <ul class="flow-legend"><li><i class="sw under"></i>可釋出餘額／調入金額</li><li><i class="sw over"></i>仍未補足的缺口</li>
+        <li><i class="sw ghost"></i>調出的部分</li><li><i class="sw xcat"></i>跨科目調配</li><li class="hint">左右拖曳可旋轉，雙擊回正<span class="tap">；點長條看項目名稱</span></li></ul>`;
+    const canvas = el.querySelector('canvas'), tip = el.querySelector('.field-tip'), range = el.querySelector('input');
+    flow = window.FPAFlow.create(canvas, el.querySelector('.flow-labels'), {
+      reducedMotion: !MO.enabled,
+      onHover(b, x, y) {
+        if (!b) { tip.hidden = true; return; }
+        tip.innerHTML = b.side < 0
+          ? `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>可釋出 ${M(b.cap)}　本次調出 <span class="neg">${M(b.used)}</span> 百萬元`
+          : `<b>${esc(b.name)}</b><br>${esc(b.sub)}<br>缺口 ${M(b.need)}　調入 <span class="neg">${M(b.got)}</span> 百萬元${b.need - b.got > 1 ? `<br><span class="pos">仍不足 ${M(b.need - b.got)} 百萬元</span>` : ''}`;
+        tip.hidden = false;
+        tip.style.transform = `translate(${Math.min(x + 14, canvas.clientWidth - 230)}px, ${Math.max(y - 80, 4)}px)`;
+      },
+    });
+    if (!flow) return null;
+    range.addEventListener('input', () => { if (flowTween) flowTween.kill(); flow.setPhase(range.value / 100); });
+    el.querySelector('[data-flow-play]').addEventListener('click', playFlow);
+    return el;
+  }
+  function playFlow() {
+    const range = flowEl.querySelector('input');
+    if (flowTween) flowTween.kill();
+    if (!MO.enabled || !window.gsap) { flow.setPhase(1); range.value = 100; return; }
+    const o = { p: 0 };
+    flow.setPhase(0);
+    flowTween = window.gsap.to(o, { p: 1, duration: 2.8, delay: 0.25, ease: 'power2.inOut',
+      onUpdate: () => { flow.setPhase(o.p); range.value = Math.round(o.p * 100); } });
+  }
+  function mountFlow(slot) {
+    if (!window.FPAFlow) return;
+    if (!flowEl) {
+      try { flowEl = buildFlowEl(); } catch (e) { console.warn('flow view disabled:', e.message); flowEl = null; }
+      if (!flowEl) { slot.remove(); return; }
+    }
+    slot.replaceWith(flowEl);
+    const d = flowData(), sig = JSON.stringify(d.moves.map((m) => [m.from, m.to, Math.round(m.amount)])) + d.receivers.length;
+    if (sig !== flowSig) { flowSig = sig; flow.setData(d); flow.relabel(); playFlow(); }
+    else flow.relabel();
   }
 
   // ------------------------------------------------------------------ boot

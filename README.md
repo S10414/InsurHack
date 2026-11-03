@@ -19,7 +19,7 @@ commitments). Everything is computed in the browser.
 | Year-end forecast | 4 methods + weighted blend + commitment floor, 80% band, what-if on remaining execution rate; filter by department / project / category |
 | Alerts | adjustable rules (probability, % and amount materiality), CSV export |
 | History | multi-year execution rates per department, project and category, behaviour tags (chronic overrun / underspend / Q4 rush), seasonality chart |
-| Reallocation | suggested transfers from safe-surplus lines to likely-overrun lines (same department's other projects first, then other departments, then other categories), with caveats |
+| Reallocation | WebGL flow view (surplus lines -> overrun lines, ribbons as thick as the amount, before/after slider) plus suggested transfers from safe-surplus lines to likely-overrun lines (same department's other projects first, then other departments, then other categories), with caveats |
 | Data | sample / upload CSV or Excel / templates / one-click full Excel report / data-quality warnings |
 
 Every table has CSV and Excel export. Excel upload reads the first sheet as budget/actual and a sheet whose name contains 承諾 (or "commit") as commitments, so an exported report can be loaded back. Excel I/O uses SheetJS community 0.18.5 (Apache-2.0, vendored).
@@ -27,7 +27,10 @@ Every table has CSV and Excel export. Excel upload reads the first sheet as budg
 ### Front-end stack
 - `docs/js/field.js` — WebGL2 "budget field" in the hero: one bar per department x month (actual, or translucent hatched
   forecast), a plate at that month's budget, coloured by spend vs budget. Hover for numbers, click to open that
-  department's projects. Hand-written shaders, no 3D library.
+  department's projects. Drag or swipe sideways to turn it (arrow keys too; double-click resets). Hand-written shaders, no 3D library.
+- `docs/js/flow.js` — WebGL2 reallocation flow: surplus lines on the left, overrun lines on the right, one ribbon per
+  transfer whose thickness equals the amount on the bars' scale; the overrun bars fill with teal as transfers arrive, so
+  the coral left over is the gap that still needs extra budget.
 - `docs/js/motion.js` — GSAP 3.15 + ScrollTrigger and Lenis 1.3 (vendored in `docs/vendor/`): one load sequence, a pinned
   scroll that tilts the field into a top-down heat map, and transitions only in response to user actions.
   `prefers-reduced-motion` turns smooth scrolling and animation off; browsers without WebGL2 get the headline only.

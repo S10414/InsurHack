@@ -828,60 +828,55 @@
     } else sc.scene.relabel();
   }
 
-  /** Variance terrain: one row per item of the current level (largest |variance| first, max 10),
-   *  one column per closed month (last 12), bar = (actual − budget) ÷ budget, above the floor = overspend. */
+  /** Variance columns: one bar per item of the current level (largest |variance| in the selected window first,
+   *  max 12) on a glass floor that is the budget; up = overspend, down = under budget, faded = below the materiality
+   *  threshold. The tooltip adds the same item's year-to-date (or this month's) variance for context. */
   function varianceScene() {
     const u = S.ui.variance, P = S.res.panel, mp = S.settings.materialPct, ma = S.settings.materialAmount;
-    const vars = F.variance(P, u.level, u.window, { dept: u.dept || null, proj: u.proj, materialPct: mp, materialAmount: ma }).slice(0, 10);
-    if (!vars.length) return null;
-    const N = 12, SPX = 1.0, SPZ = 1.15, nR = vars.length, CAP = 0.5, H = 2.4;
+    const o = { dept: u.dept || null, proj: u.proj, materialPct: mp, materialAmount: ma };
+    const items = F.variance(P, u.level, u.window, o).filter((v) => Number.isFinite(v.variancePct)).slice(0, 12);
+    if (!items.length) return null;
+    const refW = u.window === 'ytd' ? 'month' : 'ytd', refL = refW === 'ytd' ? '年累計' : '當月';
+    const ref = new Map(F.variance(P, u.level, refW, o).map((v) => [v.name, v]));
+    const n = items.length, SP = 1.3, W = 0.62, H = 2.0;
+    // linear scale; one far outlier is capped (notch + true value) instead of flattening every other bar
+    const abs = items.map((v) => Math.abs(v.variancePct)).sort((a, b) => b - a);
+    let cap = abs[0];
+    if (abs.length > 1 && abs[0] > abs[1] * 1.8) cap = abs[1] * 1.4;
+    cap = Math.max(0.04, Math.min(0.3, cap));
+    const Yd = (d) => Math.max(-cap, Math.min(cap, d)) / cap * H;
+    const xOf = (i) => (i - (n - 1) / 2) * SP;
     const boxes = [], lines = [], labels = [], picks = [], fit = [], tris = [];
-    const [wa, wb] = u.window === 'month' ? [P.m - 1, P.m] : u.window === 'qtd' ? [3 * Math.floor((P.m - 1) / 3), P.m] : [0, P.m];
-    let monthsRef = null;
-    vars.forEach((v, r) => {
-      const f = { dept: v.dept || u.dept || null, proj: v.proj !== undefined ? v.proj : (u.dept ? u.proj : null), cat: v.cat || null };
-      const tr = F.varianceTrend(P, { ...f, months: N });
-      if (!monthsRef || tr.length > monthsRef.length) monthsRef = tr;
-      const z = (r - (nR - 1) / 2) * SPZ;
-      const off = N - tr.length;
-      tr.forEach((t, j) => {
-        const i = j + off, x = (i - (N - 1) / 2) * SPX;
-        const pct = Number.isFinite(t.pct) ? t.pct : 0, h = Math.max(-CAP, Math.min(CAP, pct)) / CAP * H;
-        const material = Math.abs(pct) >= mp && Math.abs(t.variance) >= ma;
-        const base = pct > 0 ? RGB.over : RGB.under, col = material ? base : mixc(base, RGB.mid, 0.6);
-        boxes.push({ x, z, y0: Math.min(0, h), y1: Math.max(0, h) + (Math.abs(h) < 0.02 ? 0.02 : 0), w: 0.62, d: 0.62, color: col, id: r });
-        fit.push([x - 0.31, h, z - 0.31], [x + 0.31, h, z + 0.31], [x - 0.31, 0, z + 0.31], [x + 0.31, 0, z - 0.31]);
-        const sel = { dept: v.dept || null, proj: v.proj, cat: v.cat || null, name: v.name };
-        picks.push({ a: [x, 0, z], b: [x, h, z], r: 12, group: r, data: {
-          tip: `<b>${esc(v.name)}</b>　${t.year} 年 ${t.month} 月<br>預算 ${A(t.budget)}　實際 ${A(t.actual)}<br><span class="${t.variance > 0 ? 'pos' : 'neg'}">${t.variance > 0 ? '超支' : '低於預算'} ${A(Math.abs(t.variance))}（${pct > 0 ? '+' : ''}${Pc(pct, 1)}）</span>${material ? '　重大差異' : ''}<br><span class="small">點選查看此項目的月度趨勢</span>`,
-          go: () => { u.sel = u.sel && u.sel.name === sel.name ? null : sel; render(); } } });
-      });
-      labels.push({ text: v.name, p: [-(N / 2) * SPX - 0.3, 0, z], align: 'right', cls: 'row', id: r });
-    });
-    // floor grid, the zero plane, and the months that make up the selected window
-    const x0 = -(N / 2) * SPX, x1 = (N / 2) * SPX, z0 = -(nR / 2) * SPZ, z1 = (nR / 2) * SPZ, grid = [0.62, 0.70, 0.82, 0.18];
-    for (let r = 0; r <= nR; r++) lines.push({ a: [x0, 0, z0 + r * SPZ], b: [x1, 0, z0 + r * SPZ], color: grid });
-    for (let i = 0; i <= N; i++) lines.push({ a: [x0 + i * SPX, 0, z0], b: [x0 + i * SPX, 0, z1], color: grid });
-    tris.unshift({ v: [[x0, -0.006, z0], [x1, -0.006, z0], [x1, -0.006, z1], [x0, -0.006, z0], [x1, -0.006, z1], [x0, -0.006, z1]], color: [0.055, 0.10, 0.17, 0.78] });
-    const curYear = P.years[P.yi];
-    (monthsRef || []).forEach((t, j) => {
-      const i = j + (N - monthsRef.length), x = (i - (N - 1) / 2) * SPX;
-      const inWin = t.year === curYear && t.month - 1 >= wa && t.month - 1 < wb;
-      if (inWin) {
-        const a = x - SPX / 2, b = x + SPX / 2, c = [0.95, 0.80, 0.45, 0.13];
-        tris.push({ v: [[a, -0.003, z0], [b, -0.003, z0], [b, -0.003, z1], [a, -0.003, z0], [b, -0.003, z1], [a, -0.003, z1]], color: c });
-      }
-      labels.push({ text: t.month === 1 || j === 0 ? `${t.year}/${t.month}` : `${t.month}月`, p: [x, 0, z1 + 0.5], align: 'center', cls: 'month' + (inWin ? ' win' : '') + ((N - 1 - i) % 3 ? ' alt' : ''), reserve: false });
-    });
-    for (const x of [x0 - 0.3, x1]) for (const z of [z0, z1 + 0.6]) fit.push([x, 0, z]);
+    const x0 = xOf(0) - SP / 2, x1 = xOf(n - 1) + SP / 2, z0 = -0.9, z1 = 0.9;
+    tris.push({ v: [[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z0], [x1, 0, z1], [x0, 0, z1]], color: [0.80, 0.86, 0.95, 0.16] });
+    lines.push({ a: [x0, 0, z0], b: [x1, 0, z0], color: [0.93, 0.96, 1, 0.35] }, { a: [x0, 0, z1], b: [x1, 0, z1], color: [0.93, 0.96, 1, 0.85] },
+      { a: [x0, 0, z0], b: [x0, 0, z1], color: [0.93, 0.96, 1, 0.5] }, { a: [x1, 0, z0], b: [x1, 0, z1], color: [0.93, 0.96, 1, 0.5] });
+    labels.push({ text: '預算', p: [x0 - 0.15, 0, z1], align: 'right', cls: 'axis zero' });
     const wl = { month: '當月', qtd: '本季累計', ytd: '年累計' }[u.window];
+    items.forEach((v, i) => {
+      const x = xOf(i), d = v.variancePct, y = Yd(d);
+      const base = d > 0 ? RGB.over : RGB.under, col = v.material ? base : mixc(base, RGB.mid, 0.45);
+      boxes.push({ x, z: 0, y0: Math.min(0, y), y1: Math.max(0, y) + (Math.abs(y) < 0.02 ? 0.02 : 0), w: W, d: W, color: col, id: i });
+      if (Math.abs(d) > cap) boxes.push({ x, z: 0, y0: y - Math.sign(d) * 0.18, y1: y - Math.sign(d) * 0.12, w: W + 0.02, d: W + 0.02, color: [0.06, 0.11, 0.19], id: i });
+      const r = ref.get(v.name);
+      const top = y;
+      labels.push({ html: `<b class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}</b><i>${A(Math.abs(v.variance))}</i>`,
+        p: [x, top + (d >= 0 ? 0.25 : -0.25), 0], align: 'center', cls: 'val ' + (d >= 0 ? 'up' : 'down'), id: i, reserve: false });
+      labels.push({ text: v.name, p: d >= 0 ? [x, 0, z1 + 0.35] : [x, 0.32, z0], align: 'center', cls: 'name', id: i, reserve: false });
+      for (const yy of [y, top + (d >= 0 ? 0.6 : -0.6)]) fit.push([x - W / 2 - 0.17, yy, -W / 2 - 0.17], [x + W / 2 + 0.17, yy, W / 2 + 0.17]);
+      const sel = { dept: v.dept || null, proj: v.proj, cat: v.cat || null, name: v.name };
+      picks.push({ a: [x, 0, 0], b: [x, y, 0], r: 22, group: i, data: {
+        tip: `<b>${esc(v.name)}</b>　${wl}<br>預算 ${A(v.budget)}　實際 ${A(v.actual)}<br><span class="${v.variance > 0 ? 'pos' : 'neg'}">${v.variance > 0 ? '超支' : '低於預算'} ${A(Math.abs(v.variance))}（${d > 0 ? '+' : '−'}${Pc(Math.abs(d), 1)}）</span>${v.material ? '　重大差異' : ''}${r ? `<br>${refL}：${r.variancePct > 0 ? '+' : '−'}${Pc(Math.abs(r.variancePct), 1)}` : ''}<br><span class="small">點選查看此項目的月度趨勢</span>`,
+        go: () => { u.sel = u.sel && u.sel.name === sel.name ? null : sel; render(); } } });
+    });
+    for (const x of [x0, x1]) fit.push([x, 0, z0], [x, 0, z1 + 0.7], [x, 0.6, z0]);
     return {
-      title: '每月差異地形', sub: `高於地面為超支、低於地面為低於預算；淡色為未達重大差異門檻；金色底為${wl}期間`,
-      aria: '各項目近 12 個月的預算差異立體圖',
-      legend: `<li><i class="sw over"></i>超支（重大）</li><li><i class="sw under"></i>低於預算（重大）</li><li><i class="sw mid"></i>未達重大門檻</li><li><i class="sw win"></i>${wl}期間</li><li class="hint">高度 = 差異 ÷ 預算，±${Pc(CAP)} 封頂；點長條看該項目的趨勢</li>`,
-      sig: ['v', u.level, u.window, u.dept, u.proj, S.month, mp, ma, vars.map((v) => v.name + Math.round(v.variance)).join()].join('|'),
-      camera: { phi: 0.62, theta: -0.42, phiNarrow: 0.9, thetaNarrow: -0.2, sx: 1.8, sy: 1.8, syNarrow: 2.4, bottom: 6, top: 6 },
-      anim: { from: { grow: 0 }, to: { grow: 1 }, duration: 1.1 },
+      title: '差異落點', sub: `${wl}各項目實際比預算多或少多少`,
+      aria: '各項目實際支出相對預算的超支或節省立體圖',
+      legend: `<li><i class="sw over"></i>超支（重大）</li><li><i class="sw under"></i>低於預算（重大）</li><li><i class="sw mid"></i>未達重大門檻</li><li class="hint">地面 = 預算；高度 = 差異 ÷ 預算，超過 ±${Pc(cap)} 截斷；點長條看該項目的趨勢</li>`,
+      sig: ['v3', u.level, u.window, u.dept, u.proj, S.month, mp, ma, items.map((v) => v.name + Math.round(v.variance)).join()].join('|'),
+      camera: { phi: 0.24, theta: -0.14, phiNarrow: 0.3, thetaNarrow: -0.08, sx: 1.8, sy: 1.8, syNarrow: 2.6, bottom: 8, top: 8 },
+      anim: { from: { grow: 0 }, to: { grow: 1 }, duration: 1.0 },
       scene: { boxes, lines, labels, picks, fit, tris },
     };
   }

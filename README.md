@@ -29,8 +29,8 @@ Every table has CSV and Excel export. Excel upload reads the first sheet as budg
   forecast), a plate at that month's budget, coloured by spend vs budget. Hover for numbers, click to open that
   department's projects. Hand-written shaders, no 3D library.
 - `docs/js/scene3d.js` — small shared WebGL2 scene (instanced boxes, translucent walls, lines, projected labels, hover
-  groups, content-fitted camera) behind two more views: the **variance terrain** (rows = items of the current level, columns
-  = last 12 closed months, bar = variance ÷ budget, above the floor = overspend, faded = below the materiality threshold) and
+  groups, content-fitted camera) behind two more views: the **variance landing** (one bar per item for the selected window on a glass floor that is the budget: up = overspend,
+  down = under budget, faded = below the materiality threshold) and
   the **year-end landing** (one column per unit on a glass floor that is the full-year
   budget: solid bar = forecast vs budget, up = overrun, down = surplus; glass column = 80% band, so a column crossing the floor
   is undecided; linear % scale, outliers capped with a notch and their true value in the label).

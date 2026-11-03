@@ -28,6 +28,11 @@ Every table has CSV and Excel export. Excel upload reads the first sheet as budg
 - `docs/js/field.js` — WebGL2 "budget field" in the hero: one bar per department x month (actual, or translucent hatched
   forecast), a plate at that month's budget, coloured by spend vs budget. Hover for numbers, click to open that
   department's projects. Hand-written shaders, no 3D library.
+- `docs/js/scene3d.js` — small shared WebGL2 scene (instanced boxes, translucent walls, lines, projected labels, hover
+  groups, content-fitted camera) behind two more views: the **variance terrain** (rows = items of the current level, columns
+  = last 12 closed months, bar = variance ÷ budget, above the floor = overspend, faded = below the materiality threshold) and
+  the **forecast corridor** (per unit, cumulative spend minus cumulative budget as a share of the full-year budget: actual
+  wall to the last closed month, then forecast and 80% band to December; signed square-root height scale).
 - `docs/js/flow.js` — WebGL2 reallocation flow: surplus lines on the left, overrun lines on the right, one ribbon per
   transfer whose thickness equals the amount on the bars' scale; the overrun bars fill with teal as transfers arrive, so
   the coral left over is the gap that still needs extra budget.

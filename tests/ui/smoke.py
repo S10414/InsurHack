@@ -43,7 +43,8 @@ async def main():
         await pg.select_option("select[data-ui='variance.proj']", "委外理賠調查"); await pg.wait_for_timeout(150)
         await pg.click("tr[data-var-sel='0']"); await pg.wait_for_timeout(150)
         print("variance project scope:", (await pg.inner_text("#view .grid2 .card:nth-child(2) h3")))
-        await pg.click("nav button[data-tab=alerts]"); await pg.fill("input[data-risk=minAmount]", "50"); await pg.dispatch_event("input[data-risk=minAmount]","change"); await pg.wait_for_timeout(200)
+        await pg.click("nav button[data-tab=alerts]"); await pg.wait_for_timeout(200)
+        assert await pg.locator("input[data-risk]").count() == 0 and "預警規則" in await pg.inner_text(".foot")
         print("alerts chips:", (await pg.inner_text(".chips")).replace("\n"," "))
         # upload test
         await pg.click("nav button[data-tab=data]")

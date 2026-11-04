@@ -185,6 +185,7 @@
     const hidden = kind === 'dept' ? all.filter((d) => d.risk.startsWith('綠') && (d.nRed || d.nAmber)) : [];
     return `
       ${crumbs(f, 'data-drill')}
+      ${summaryCard(f)}
       <div class="kpis">${kp.map(([l, v, n]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('')}</div>
       <div class="card strip-card"><h3>${esc(name)}的預算組成</h3>
         <p class="small" style="margin:0 0 8px">每一段的寬度是占全年預算的比例；數字是預測全年偏離預算多少，＋為預計超支、−為預計結餘；顏色是燈號。${hint}。</p>
@@ -474,7 +475,7 @@
   const setPath = (obj, path, val) => { const ks = path.split('.'); let o = obj; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]]; o[ks[ks.length - 1]] = val; };
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-tab],[data-sort],[data-go],[data-drill],[data-line-go],[data-fc-scope],[data-chip],[data-var-sel],[data-hist-go],[data-export],[data-load-sample],[data-template],[data-whatif-reset],[data-risk-reset]');
+    const t = e.target.closest('[data-tab],[data-sort],[data-go],[data-drill],[data-line-go],[data-fc-scope],[data-chip],[data-var-sel],[data-hist-go],[data-export],[data-load-sample],[data-template],[data-whatif-reset],[data-risk-reset],[data-copy-summary],[data-sum-more]');
     if (!t) return;
     const d = t.dataset;
     if (d.tab) { animateNext = true; S.tab = d.tab; render(); MO.toTools(); }
@@ -490,6 +491,12 @@
       render();
     }
     else if (d.histGo !== undefined) { const sc = parseScope(d.histGo), u = S.ui.history; u.dept = sc.dept; u.proj = sc.dept ? sc.proj : null; render(); }
+    else if (d.sumMore !== undefined) { t.closest('.summary').classList.add('open'); t.remove(); }
+    else if (d.copySummary !== undefined) {
+      const done = () => { t.textContent = '已複製'; setTimeout(() => { t.textContent = '複製文字'; }, 1600); };
+      const fallback = () => { const ta = document.createElement('textarea'); ta.value = S._summary || ''; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (_) { /* ignore */ } ta.remove(); };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(S._summary || '').then(done, fallback); else fallback();
+    }
     else if (d.export === 'workbook') exportWorkbook();
     else if (d.export) { exportFmt = d.fmt === 'xlsx' ? 'xlsx' : 'csv'; try { exportCSV(d.export); } finally { exportFmt = 'csv'; } }
     else if (d.loadSample !== undefined) loadSample();
@@ -583,6 +590,12 @@
     const risk = S.settings.risk, wb = XLSX.utils.book_new(), R = Math.round;
     const add = (name, cols, rows) => XLSX.utils.book_append_sheet(wb, sheetOf(toCSV(cols, rows)), name);
     const fc = [['全年預算', (r) => R(r.fyBudget)], ['年累計實際', (r) => R(r.ytdActual)], ['預測全年', (r) => R(r.fyForecast)], ['預測÷預算', (r) => r.rate.toFixed(4)], ['預計差異', (r) => R(r.gap)], ['區間下限', (r) => R(r.lo)], ['區間上限', (r) => R(r.hi)], ['超支機率', (r) => r.pOver.toFixed(3)], ['燈號', (r) => r.risk]];
+    if (window.FPASummary) {
+      const sm = summaryOf({ dept: null, proj: null });
+      const ws = XLSX.utils.aoa_to_sheet([['全公司自動摘要（依規則產生）'], [sm.headline], ...sm.items.map((x) => ['・' + x.text])]);
+      ws['!cols'] = [{ wch: 120 }];
+      XLSX.utils.book_append_sheet(wb, ws, '摘要');
+    }
     add('部門預測', [['部門', (r) => r.dept]].concat(fc), F.aggregate(S.res.series, 'dept', risk));
     if (S.info && S.info.projs.length) add('專案預測', [['部門', (r) => r.dept], ['專案', (r) => r.proj || '']].concat(fc), F.aggregate(S.res.series, 'proj', risk));
     add('科目預測', [['部門', (r) => r.dept], ['專案', (r) => r.proj || ''], ['費用科目', (r) => r.cat]].concat(fc), S.res.series);
@@ -778,6 +791,29 @@
     else flow.relabel();
   }
 
+
+
+  // ------------------------------------------------------------------ rule-based summary
+  function summaryOf(f) {
+    const u = S.ui.realloc, ra = F.reallocate(S.res, S.hist, { safety: u.safety, minAmount: u.minAmount, allowCross: u.cross });
+    return window.FPASummary.build({ res: S.res, alerts: S.alerts, hist: S.hist, panel: S.res.panel, year: S.year, month: S.month,
+      risk: S.settings.risk, scope: { dept: f.dept, proj: f.proj }, realloc: ra, F });
+  }
+  function summaryCard(f) {
+    if (!window.FPASummary) return '';
+    const sm = summaryOf(f);
+    S._summary = sm.text;
+    const link = (l) => (!l ? '' : l.kind === 'line' ? `data-line-go="${scopeKey(l.dept, l.proj)}|${esc(l.cat || '')}"`
+      : l.kind === 'tab' ? `data-go="${l.tab}"` : `data-drill="${scopeKey(l.dept, l.proj)}"`);
+    const cta = (l) => (!l ? '' : l.kind === 'line' ? '看預測' : l.kind === 'scope' ? '往下看' : l.tab === 'realloc' ? '看調配' : '看預警');
+    return `<section class="card summary" aria-label="自動摘要">
+      <div class="sum-head"><h3>自動摘要</h3><button class="btn" type="button" data-copy-summary>複製文字</button></div>
+      <p class="sum-lead">${esc(sm.headline)}</p>
+      <ul class="sum-list">${sm.items.map((x, i) => `<li class="t-${x.tone}${i >= 3 ? ' more' : ''}"><span>${esc(x.text)}</span>${x.link ? `<button class="sum-go" type="button" ${link(x.link)}>${cta(x.link)}</button>` : ''}</li>`).join('')}</ul>
+      ${sm.items.length > 3 ? `<button class="btn sum-more" type="button" data-sum-more>顯示其餘 ${sm.items.length - 3} 項</button>` : ''}
+      <p class="small sum-note">依固定規則由預測、預警、異常偵測、歷史執行與調配結果組成，每個數字都能在下方表格找到；未使用生成式模型。</p>
+    </section>`;
+  }
 
   // ------------------------------------------------------------------ 3D views for variance and year-end forecast
   const scenes = {};

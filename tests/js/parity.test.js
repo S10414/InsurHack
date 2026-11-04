@@ -107,4 +107,20 @@ const tampered = b.rows.map((r) => (r.year === 2025 && r.month > 6 && r.actual !
 const early2 = FPA.forecast(tampered, [], 2025, 6);
 close(early.series.reduce((a, s) => a + s.fyForecast, 0), early2.series.reduce((a, s) => a + s.fyForecast, 0), 1e-12, 'no look-ahead');
 
-console.log(`OK  ${checked} budget lines, ${projAgg.length} projects, parity with Python within tolerance; ${ra.moves.length} transfer suggestions (${ra.moves.filter((m) => m.inDept).length} within a department)`);
+// rule-based summary: every planted scenario is explained with the right reason, and the numbers match the engine
+const Sm = require(path.join(root, 'docs/js/summary.js'));
+const histS = FPA.history(res.panel, 'series'), alertsS = FPA.buildAlerts(res, histS);
+const sumAll = Sm.build({ res, alerts: alertsS, hist: histS, panel: res.panel, year: yr, month: mo, risk: FPA.DEFAULT_SETTINGS.risk,
+  scope: {}, realloc: FPA.reallocate(res, histS, {}), F: FPA });
+for (const [needle, why] of [['TW-ICS 接軌專案', '一次性'], ['委外理賠調查', '持續偏高'], ['經代通路拓展', '執行率都高於 100%'],
+  ['核心系統換版', '已簽約未付款'], ['行銷企劃部合計為綠燈', '品牌形象廣告'], ['內部調配', '需追加預算']]) {
+  const line = sumAll.items.find((x) => x.text.includes(needle));
+  assert.ok(line && line.text.includes(why), `summary: ${needle} should mention ${why}`);
+}
+const totAll = FPA.aggregate(res.series, 'total', FPA.DEFAULT_SETTINGS.risk)[0];
+assert.ok(sumAll.headline.includes(Sm.amt(Math.abs(totAll.gap))), 'summary headline gap matches the engine');
+const sumHR = Sm.build({ res, alerts: alertsS, hist: histS, panel: res.panel, year: yr, month: mo, risk: FPA.DEFAULT_SETTINGS.risk,
+  scope: { dept: '人力資源部' }, realloc: null, F: FPA });
+assert.ok(sumHR.items.length === 1 && sumHR.items[0].tone === 'ok', 'quiet department gets a single all-clear line');
+
+console.log(`OK  ${checked} budget lines, ${projAgg.length} projects, parity with Python within tolerance; ${ra.moves.length} transfer suggestions (${ra.moves.filter((m) => m.inDept).length} within a department); summary ${sumAll.items.length} items`);

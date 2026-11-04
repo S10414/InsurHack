@@ -14,7 +14,7 @@ commitments). Everything is computed in the browser.
 
 | Tab | What it does |
 |---|---|
-| Overview | drill-down company -> department -> project -> expense category: KPIs, budget-composition strip coloured by risk, cumulative chart and table for the current level; flags a department that is green in total but hides red projects |
+| Overview | rule-based **auto summary** for the current scope (headline + the reason behind each red / amber item, hidden red projects, seasonal lags, internal funding), each line linked to its detail; then drill-down company -> department -> project -> expense category: KPIs, budget-composition strip coloured by risk, cumulative chart and table for the current level; flags a department that is green in total but hides red projects |
 | Variance | month / QTD / YTD budget vs actual by department, project, category or project x category; waterfall, 24-month trend, one-off detection |
 | Year-end forecast | 4 methods + weighted blend + commitment floor, 80% band, what-if on remaining execution rate; filter by department / project / category |
 | Alerts | adjustable rules (probability, % and amount materiality), CSV export |
@@ -52,7 +52,8 @@ Pages setting: Settings -> Pages -> Deploy from a branch -> `main` and either `/
 | `src/analysis/`, `src/forecast/` reference implementation (Python) | done, tested |
 | `docs/js/engine.js` browser port of the same logic | done, parity-tested against Python |
 | `docs/` UI (7 tabs) | done |
-| AI summary / natural-language query (`src/ai/`) | planned |
+| `docs/js/summary.js` rule-based summary (templates filled from engine outputs; no language model) | done, asserted in the JS test |
+| LLM narrative / natural-language query | not planned for the submission (needs a backend; numbers must stay traceable) |
 
 ## Quick start
 

@@ -211,7 +211,7 @@
         } else {                    // receiver: arrived money (teal) under the remaining gap (coral)
           const got = b.part * ph;
           if (got > 0.002) { I.push(b.x, b.z, 0, got); C.push(...TEAL, id(b)); }
-          I.push(b.x, b.z, got, b.full); C.push(...CORAL, id(b));
+          if (b.full - got > 0.01) { I.push(b.x, b.z, got, b.full); C.push(...CORAL, id(b)); }
         }
       }
       st.solidN = I.length / 4;

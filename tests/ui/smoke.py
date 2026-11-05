@@ -14,7 +14,7 @@ async def main():
         await pg.goto(URL); await pg.wait_for_timeout(400)
         async def shot(name, full=True): await pg.screenshot(path=f"{OUT}/{name}.png", full_page=full)
         await shot("t_overview")
-        for tab in ["variance","forecast","alerts","history","realloc","data"]:
+        for tab in ["summary","variance","forecast","alerts","history","realloc","data"]:
             await pg.click(f"nav button[data-tab={tab}]"); await pg.wait_for_timeout(250); await shot(f"t_{tab}")
         # interactions
         await pg.click("nav button[data-tab=overview]")

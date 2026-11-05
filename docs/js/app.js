@@ -22,6 +22,7 @@
     settings: JSON.parse(JSON.stringify(F.DEFAULT_SETTINGS)), res: null, hist: null, histDept: null, alerts: [],
     ui: {
       overview: { risk: 'all', sort: { key: 'gap', dir: -1 }, dept: '', proj: null },
+      summary: { dept: '', proj: null },
       variance: { window: 'ytd', level: 'dept', dept: '', proj: null, sel: null, sort: { key: 'variance', dir: -1 } },
       forecast: { dept: '', proj: null, cat: '', factor: null },
       alerts: { level: 'all' },
@@ -29,7 +30,7 @@
       realloc: { safety: 1, minAmount: 1e6, cross: true },
     },
   };
-  const TABS = [['overview', '總覽'], ['variance', '差異分析'], ['forecast', '年底預測'], ['alerts', '預警'],
+  const TABS = [['overview', '總覽'], ['summary', '自動摘要'], ['variance', '差異分析'], ['forecast', '年底預測'], ['alerts', '預警'],
     ['history', '歷史執行'], ['realloc', '預算調配'], ['data', '資料']];
 
   // ------------------------------------------------------------------ data & compute
@@ -185,7 +186,6 @@
     const hidden = kind === 'dept' ? all.filter((d) => d.risk.startsWith('綠') && (d.nRed || d.nAmber)) : [];
     return `
       ${crumbs(f, 'data-drill')}
-      ${summaryCard(f)}
       <div class="kpis">${kp.map(([l, v, n]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('')}</div>
       <div class="card strip-card"><h3>${esc(name)}的預算組成</h3>
         <p class="small" style="margin:0 0 8px">每一段的寬度是占全年預算的比例；數字是預測全年偏離預算多少，＋為預計超支、−為預計結餘；顏色是燈號。${hint}。</p>
@@ -203,7 +203,7 @@
       <h2>${u.dept ? esc(name) + '：' : ''}${unit}明細 <span class="small">　${hint}</span></h2>
       <div class="row"><div class="chips">${[['all', '全部'], ['red', '紅燈'], ['amber', '黃燈'], ['green', '綠燈']].map(([k, l]) => `<button class="chip ${u.risk === k ? 'on' : ''}" data-chip="overview.risk:${k}">${l}</button>`).join('')}</div>
         ${u.dept ? `<button class="btn" data-drill="${f.proj != null && hasProj(u.dept) ? scopeKey(u.dept, null) : ''}">回上一層</button>` : ''}
-        <button class="btn" data-fc-scope>看${esc(name)}的年底預測</button>
+        <button class="btn" data-fc-scope>看${esc(name)}的年底預測</button><button class="btn" type="button" data-sum-scope="${scopeKey(u.dept, u.dept ? u.proj : null)}" data-sum-open>看${esc(name)}的自動摘要</button>
         <button class="btn" data-export="overview">匯出 CSV</button><button class="btn" data-export="overview" data-fmt="xlsx">匯出 Excel</button></div>
       <div class="card tw"><table><thead><tr>
         ${th('overview', 'name', unit, u.sort, true)}${th('overview', 'fyBudget', '全年預算', u.sort)}${th('overview', 'ytdActual', '年累計實際', u.sort)}
@@ -423,7 +423,7 @@
   }
 
   // ------------------------------------------------------------------ render
-  const VIEWS = { overview: viewOverview, variance: viewVariance, forecast: viewForecast, alerts: viewAlerts, history: viewHistory, realloc: viewRealloc, data: viewData };
+  const VIEWS = { overview: viewOverview, summary: viewSummary, variance: viewVariance, forecast: viewForecast, alerts: viewAlerts, history: viewHistory, realloc: viewRealloc, data: viewData };
 
   function render() {
     $('#nav').innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'alerts' && S.res ? `<span class="badge">${nonRed()}</span>` : ''}</button>`).join('');
@@ -475,7 +475,7 @@
   const setPath = (obj, path, val) => { const ks = path.split('.'); let o = obj; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]]; o[ks[ks.length - 1]] = val; };
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-tab],[data-sort],[data-go],[data-drill],[data-line-go],[data-fc-scope],[data-chip],[data-var-sel],[data-hist-go],[data-export],[data-load-sample],[data-template],[data-whatif-reset],[data-risk-reset],[data-copy-summary],[data-sum-more]');
+    const t = e.target.closest('[data-tab],[data-sort],[data-go],[data-drill],[data-line-go],[data-fc-scope],[data-chip],[data-var-sel],[data-hist-go],[data-export],[data-load-sample],[data-template],[data-whatif-reset],[data-risk-reset],[data-copy-summary],[data-sum-scope]');
     if (!t) return;
     const d = t.dataset;
     if (d.tab) { animateNext = true; S.tab = d.tab; render(); MO.toTools(); }
@@ -491,7 +491,7 @@
       render();
     }
     else if (d.histGo !== undefined) { const sc = parseScope(d.histGo), u = S.ui.history; u.dept = sc.dept; u.proj = sc.dept ? sc.proj : null; render(); }
-    else if (d.sumMore !== undefined) { t.closest('.summary').classList.add('open'); t.remove(); }
+    else if (d.sumScope !== undefined) { const sc = parseScope(d.sumScope), u = S.ui.summary; u.dept = sc.dept || ''; u.proj = sc.dept ? sc.proj : null; if (d.sumOpen !== undefined) { S.tab = 'summary'; MO.toTools(); } animateNext = true; render(); }
     else if (d.copySummary !== undefined) {
       const done = () => { t.textContent = '已複製'; setTimeout(() => { t.textContent = '複製文字'; }, 1600); };
       const fallback = () => { const ta = document.createElement('textarea'); ta.value = S._summary || ''; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (_) { /* ignore */ } ta.remove(); };
@@ -799,19 +799,27 @@
     return window.FPASummary.build({ res: S.res, alerts: S.alerts, hist: S.hist, panel: S.res.panel, year: S.year, month: S.month,
       risk: S.settings.risk, scope: { dept: f.dept, proj: f.proj }, realloc: ra, F });
   }
+  function viewSummary() {
+    const u = S.ui.summary, f = { dept: u.dept || null, proj: u.dept ? u.proj : null };
+    return `
+      <div class="row">${scopeSelects('summary', u)}
+        ${u.dept ? `<button class="btn" type="button" data-sum-scope="${f.proj != null && hasProj(u.dept) ? scopeKey(u.dept, null) : ''}">回上一層</button>` : ''}
+        <button class="btn" type="button" data-go="overview">回總覽</button></div>
+      ${summaryCard(f)}`;
+  }
+
   function summaryCard(f) {
     if (!window.FPASummary) return '';
     const sm = summaryOf(f);
     S._summary = sm.text;
     const link = (l) => (!l ? '' : l.kind === 'line' ? `data-line-go="${scopeKey(l.dept, l.proj)}|${esc(l.cat || '')}"`
-      : l.kind === 'tab' ? `data-go="${l.tab}"` : `data-drill="${scopeKey(l.dept, l.proj)}"`);
+      : l.kind === 'tab' ? `data-go="${l.tab}"` : `data-sum-scope="${scopeKey(l.dept, l.proj)}"`);
     const cta = (l) => (!l ? '' : l.kind === 'line' ? '看預測' : l.kind === 'scope' ? '往下看' : l.tab === 'realloc' ? '看調配' : '看預警');
     return `<section class="card summary" aria-label="自動摘要">
-      <div class="sum-head"><h3>自動摘要</h3><button class="btn" type="button" data-copy-summary>複製文字</button></div>
+      <div class="sum-head"><h3>${esc(scopeName(f))}</h3><button class="btn" type="button" data-copy-summary>複製文字</button></div>
       <p class="sum-lead">${esc(sm.headline)}</p>
-      <ul class="sum-list">${sm.items.map((x, i) => `<li class="t-${x.tone}${i >= 3 ? ' more' : ''}"><span>${esc(x.text)}</span>${x.link ? `<button class="sum-go" type="button" ${link(x.link)}>${cta(x.link)}</button>` : ''}</li>`).join('')}</ul>
-      ${sm.items.length > 3 ? `<button class="btn sum-more" type="button" data-sum-more>顯示其餘 ${sm.items.length - 3} 項</button>` : ''}
-      <p class="small sum-note">依固定規則由預測、預警、異常偵測、歷史執行與調配結果組成，每個數字都能在下方表格找到；未使用生成式模型。</p>
+      <ul class="sum-list">${sm.items.map((x, i) => `<li class="t-${x.tone}"><span>${esc(x.text)}</span>${x.link ? `<button class="sum-go" type="button" ${link(x.link)}>${cta(x.link)}</button>` : ''}</li>`).join('')}</ul>
+      <p class="small sum-note">依固定規則由預測、預警、異常偵測、歷史執行與調配結果組成，每個數字都能在其他分頁的表格找到出處；未使用生成式模型。</p>
     </section>`;
   }
 

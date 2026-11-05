@@ -14,7 +14,8 @@ commitments). Everything is computed in the browser.
 
 | Tab | What it does |
 |---|---|
-| Overview | rule-based **auto summary** for the current scope (headline + the reason behind each red / amber item, hidden red projects, seasonal lags, internal funding), each line linked to its detail; then drill-down company -> department -> project -> expense category: KPIs, budget-composition strip coloured by risk, cumulative chart and table for the current level; flags a department that is green in total but hides red projects |
+| Overview | drill-down company -> department -> project -> expense category: KPIs, budget-composition strip coloured by risk, cumulative chart and table for the current level; flags a department that is green in total but hides red projects |
+| Auto summary | rule-based summary for a chosen scope (company, department or project): headline + the reason behind each red / amber item, hidden red projects, seasonal lags, internal funding; each line links to its detail; copy as text |
 | Variance | month / QTD / YTD budget vs actual by department, project, category or project x category; waterfall, 24-month trend, one-off detection |
 | Year-end forecast | 4 methods + weighted blend + commitment floor, 80% band, what-if on remaining execution rate; filter by department / project / category |
 | Alerts | adjustable rules (probability, % and amount materiality), CSV export |
